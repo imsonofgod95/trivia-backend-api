@@ -10,7 +10,7 @@ import io
 
 app = FastAPI()
 
-# Configuración de CORS para que tu juego (frontend) pueda comunicarse con este servidor
+# Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,7 +30,6 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection()
-    # Crear la tabla con la estructura necesaria
     conn.execute('''
         CREATE TABLE IF NOT EXISTS preguntas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,12 +42,11 @@ def init_db():
         )
     ''')
     
-    # CARGA AUTOMÁTICA: Si la base está vacía, lee el CSV
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM preguntas")
     if cursor.fetchone()[0] == 0:
         if os.path.exists(CSV_FILE):
-            print(f"📦 Detectado {CSV_FILE}. Cargando preguntas iniciales...")
+            print(f"📦 Cargando datos desde {CSV_FILE}...")
             df = pd.read_csv(CSV_FILE)
             for _, row in df.iterrows():
                 conn.execute('''
@@ -57,16 +55,11 @@ def init_db():
                 ''', (row['question_text'], row['options'], row['correct_answer'], 
                       row['category'], row['difficulty'], row['language_code']))
             conn.commit()
-            print(f"✅ ¡Éxito! Se cargaron {len(df)} preguntas automáticamente.")
-        else:
-            print("⚠️ No se encontró el CSV. La base de datos iniciará vacía.")
-    
+            print(f"✅ ¡Éxito! {len(df)} preguntas listas.")
     conn.close()
 
-# Ejecutar la inicialización al arrancar
 init_db()
 
-# --- MODELOS DE DATOS ---
 class Pregunta(BaseModel):
     question_text: str
     options: List[str]
@@ -79,41 +72,49 @@ class Paquete(BaseModel):
     secret_key: str
     preguntas: List[Pregunta]
 
-# --- RUTAS DEL SERVIDOR ---
+# --- RUTAS ---
 
 @app.get("/")
 def health_check():
     conn = get_db_connection()
     count = conn.execute("SELECT COUNT(*) FROM preguntas").fetchone()[0]
     conn.close()
-    return {
-        "status": "online",
-        "total_preguntas_en_db": count,
-        "mensaje": "Servidor de Trivia Qbit activo"
-    }
+    return {"status": "online", "total_preguntas": count}
+
+
 
 @app.get("/pregunta-random")
 def get_pregunta(lang: str = "es", difficulty: Optional[str] = Query(None)):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # LÓGICA DE FILTRADO POR DIFICULTAD E IDIOMA
-    if difficulty and difficulty != "Random":
-        cursor.execute("SELECT * FROM preguntas WHERE idioma = ? AND dificultad = ?", (lang, difficulty))
+    # Normalizamos el parámetro: Si llega "Easy" o "easy", SQL lo comparará correctamente
+    # Usamos LIKE o COLLATE NOCASE para evitar errores de mayúsculas
+    if difficulty and difficulty.lower() != "random":
+        print(f"🔍 Buscando pregunta con dificultad: {difficulty}")
+        cursor.execute(
+            "SELECT * FROM preguntas WHERE idioma = ? AND dificultad = ? COLLATE NOCASE", 
+            (lang, difficulty)
+        )
     else:
+        print("🎲 Buscando pregunta aleatoria (sin filtro)")
         cursor.execute("SELECT * FROM preguntas WHERE idioma = ?", (lang,))
         
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
-        raise HTTPException(status_code=404, detail="No hay preguntas que coincidan con los criterios.")
+        # Si no hay preguntas de esa dificultad, lanzamos error informativo
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No se encontraron preguntas para: {lang} - {difficulty}"
+        )
 
     p = random.choice(rows)
     return {
         "id": p["id"],
         "pregunta": p["pregunta"],
-        "opciones": p["opciones"], # El front maneja el parseo
+        "opciones": p["opciones"],
         "correcta": p["correcta"],
         "categoria": p["categoria"],
         "dificultad": p["dificultad"]
@@ -131,14 +132,13 @@ def inyectar_manual(paquete: Paquete):
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (p.question_text, "|".join(p.options), p.correct_answer, p.category, p.difficulty, p.language_code))
     conn.commit()
-    total = conn.execute("SELECT COUNT(*) FROM preguntas").fetchone()[0]
     conn.close()
-    return {"status": "success", "total_actual": total}
+    return {"status": "success"}
 
 @app.post("/cargar-csv-emergencia")
 async def cargar_csv(secret_key: str, file: UploadFile = File(...)):
     if secret_key != "Qbit2026":
-        raise HTTPException(status_code=403, detail="Llave secreta inválida")
+        raise HTTPException(status_code=403)
     
     content = await file.read()
     df = pd.read_csv(io.BytesIO(content))
@@ -151,6 +151,5 @@ async def cargar_csv(secret_key: str, file: UploadFile = File(...)):
         ''', (row['question_text'], row['options'], row['correct_answer'], 
               row['category'], row['difficulty'], row['language_code']))
     conn.commit()
-    total = conn.execute("SELECT COUNT(*) FROM preguntas").fetchone()[0]
     conn.close()
-    return {"status": "CSV cargado manualmente", "total_actual": total}
+    return {"status": "CSV cargado"}
