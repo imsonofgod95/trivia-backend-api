@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QBIT TRIVIA - Pro Edition</title>
+
     <style>
         :root {
             --bg-dark: #1a1f32;
@@ -34,6 +35,7 @@
             top: 0;
             left: 0;
         }
+
         #timer-bar {
             width: 100%;
             height: 100%;
@@ -44,7 +46,7 @@
         .container {
             background-color: var(--card-bg);
             width: 90%;
-            max-width: 400px;
+            max-width: 420px;
             padding: 30px;
             border-radius: 20px;
             text-align: center;
@@ -52,7 +54,11 @@
             position: relative;
         }
 
-        h1 { letter-spacing: 3px; font-size: 2.2rem; margin-top: 0; margin-bottom: 10px; }
+        h1 {
+            letter-spacing: 3px;
+            font-size: 2.2rem;
+            margin-top: 0;
+        }
 
         .language-selector {
             background-color: #1e2640;
@@ -66,17 +72,23 @@
             gap: 10px;
         }
 
-        select { background: transparent; color: white; border: none; font-size: 1rem; cursor: pointer; outline: none; }
+        select {
+            background: transparent;
+            color: white;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            outline: none;
+        }
 
         #question {
             color: var(--text-red);
-            font-size: 1.4rem;
-            margin-top: 20px;
-            margin-bottom: 5px;
-            min-height: 80px;
+            font-size: 1.35rem;
+            min-height: 90px;
             display: flex;
             align-items: center;
             justify-content: center;
+            margin-top: 15px;
         }
 
         .meta-info {
@@ -85,11 +97,9 @@
             font-size: 0.75rem;
             font-weight: bold;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
 
-        /* ESTILO DE LOS BOTONES DE RESPUESTA */
         .option-btn {
             background-color: var(--btn-blue);
             color: white;
@@ -101,13 +111,13 @@
             font-size: 1rem;
             cursor: pointer;
             transition: all 0.2s;
-            font-family: 'Arial', sans-serif;
+            font-family: Arial, sans-serif;
             font-weight: bold;
-            display: block; 
+            display: block;
         }
 
-        .option-btn:hover:not(:disabled) { 
-            background-color: #3d4670; 
+        .option-btn:hover:not(:disabled) {
+            background-color: #3d4670;
             border-color: var(--accent-green);
             transform: scale(1.02);
         }
@@ -146,6 +156,7 @@
         }
     </style>
 </head>
+
 <body>
 
 <div class="timer-container">
@@ -154,7 +165,7 @@
 
 <div class="container">
     <h1>QBIT TRIVIA</h1>
-    
+
     <div class="language-selector">
         <span id="flag-icon">🇲🇽</span>
         <select id="lang-select" onchange="updateLanguage()">
@@ -164,14 +175,13 @@
     </div>
 
     <div id="question">Cargando desafío...</div>
-    
-    <div id="meta-container" class="meta-info">CULTURA GENERAL • EASY</div>
+    <div id="meta-container" class="meta-info">DATA SCIENCE • V11</div>
 
     <div id="options-container"></div>
 
     <div class="score-bar">
         <span>SCORE: <span id="score-value">0</span></span>
-        <span>v9.4</span>
+        <span>MODO BLINDADO</span>
     </div>
 
     <div id="time-result" class="time-msg">Responde antes de que se agote el tiempo</div>
@@ -180,123 +190,137 @@
 
 <script>
     let score = 0;
-    let startTime; 
+    let startTime;
     let timerInterval;
-    const TIME_LIMIT = 15; 
+    const TIME_LIMIT = 15;
     const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
 
+    function deepClean(text) {
+        if (!text) return "";
+        return text.toString().trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    // 🔥 FUNCIÓN DEFINITIVA (maneja TODOS los casos del backend)
+    function parseOptions(rawOptions) {
+        if (!rawOptions) return [];
+
+        // Caso CRÍTICO: ["['A','B','C']"]
+        if (Array.isArray(rawOptions) && rawOptions.length === 1 && typeof rawOptions[0] === "string") {
+            return parseOptions(rawOptions[0]);
+        }
+
+        // Caso normal: ["A","B","C"]
+        if (Array.isArray(rawOptions)) {
+            return rawOptions.map(deepClean);
+        }
+
+        // Caso string Python: "['A','B','C']"
+        if (typeof rawOptions === "string") {
+            try {
+                const jsonSafe = rawOptions.replace(/'/g, '"');
+                const parsed = JSON.parse(jsonSafe);
+                return parsed.map(deepClean);
+            } catch (e) {
+                console.error("❌ Error parseando opciones:", rawOptions);
+                return [];
+            }
+        }
+
+        return [];
+    }
+
     function updateLanguage() {
-        const select = document.getElementById('lang-select');
-        const flag = document.getElementById('flag-icon');
-        flag.innerText = select.value === 'es' ? '🇲🇽' : '🇺🇸';
+        const lang = document.getElementById('lang-select').value;
+        document.getElementById('flag-icon').innerText = lang === 'es' ? '🇲🇽' : '🇺🇸';
         fetchNewQuestion();
     }
 
     async function fetchNewQuestion() {
         clearInterval(timerInterval);
+
         const qText = document.getElementById('question');
         const mText = document.getElementById('meta-container');
         const optContainer = document.getElementById('options-container');
-        const lang = document.getElementById('lang-select').value;
         const bar = document.getElementById('timer-bar');
         const msg = document.getElementById('time-result');
-        
-        // LIMPIEZA TOTAL DEL CONTENEDOR
+        const lang = document.getElementById('lang-select').value;
+
         optContainer.innerHTML = "";
-        qText.innerText = "Buscando desafío...";
-        mText.innerText = "---";
+        qText.innerText = "Buscando datos...";
         bar.style.width = "100%";
-        msg.innerText = "¡Prepárate!";
+        msg.innerText = "Sincronizando reloj...";
 
         try {
-            const response = await fetch(`${API_URL}?lang=${lang}&t=${new Date().getTime()}`);
-            const data = await response.json();
+            const res = await fetch(`${API_URL}?lang=${lang}&t=${Date.now()}`);
+            const data = await res.json();
 
-            qText.innerText = data.pregunta;
-            const categoria = data.categoria || "GENERAL";
-            const dificultad = data.dificultad || "MEDIUM";
-            mText.innerText = `${categoria} • ${dificultad}`;
-            
-            // CONSTRUCCIÓN DE BOTONES UNO POR UNO
-            if (data.opciones && Array.isArray(data.opciones)) {
-                data.opciones.forEach(opcionTexto => {
-                    const btn = document.createElement('button');
-                    btn.className = 'option-btn';
-                    btn.innerText = opcionTexto;
-                    
-                    // Asignación de evento de clic individual
-                    btn.onclick = () => check(opcionTexto, data.correcta);
-                    
-                    optContainer.appendChild(btn);
-                });
-            }
+            qText.innerText = deepClean(data.pregunta);
+            mText.innerText = `${deepClean(data.categoria)} • ${deepClean(data.dificultad)}`;
+
+            const opciones = parseOptions(data.opciones);
+
+            opciones.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "option-btn";
+                btn.innerText = opt;
+                btn.onclick = () => check(opt, data.correcta);
+                optContainer.appendChild(btn);
+            });
 
             startTimer();
-        } catch (e) {
-            qText.innerText = "Error: Servidor fuera de línea";
-            console.error("Fallo de red:", e);
+            msg.innerText = "¡Tiempo real activo!";
+        } catch (err) {
+            qText.innerText = "❌ Error conectando con el servidor";
+            console.error(err);
         }
     }
 
     function startTimer() {
-        startTime = Date.now(); 
+        startTime = Date.now();
         const bar = document.getElementById('timer-bar');
         const msg = document.getElementById('time-result');
-        msg.innerText = "¡Tiempo corriendo!";
 
         timerInterval = setInterval(() => {
-            const currentTime = Date.now();
-            const elapsedSeconds = (currentTime - startTime) / 1000;
-            const timeLeft = TIME_LIMIT - elapsedSeconds;
-            
-            const percentage = (timeLeft / TIME_LIMIT) * 100;
-            bar.style.width = `${Math.max(0, percentage)}%`;
+            const elapsed = (Date.now() - startTime) / 1000;
+            const timeLeft = TIME_LIMIT - elapsed;
+
+            bar.style.width = `${Math.max(0, (timeLeft / TIME_LIMIT) * 100)}%`;
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                bar.style.width = "0%";
                 msg.innerText = "❌ ¡TIEMPO AGOTADO!";
-                msg.style.color = "var(--text-red)";
-                
-                // Bloquear botones al agotar tiempo
-                const buttons = document.querySelectorAll('.option-btn');
-                buttons.forEach(b => b.disabled = true);
-                
-                setTimeout(() => {
-                    msg.style.color = "var(--text-dim)";
-                    fetchNewQuestion();
-                }, 2000);
+                document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+                setTimeout(fetchNewQuestion, 2000);
             }
         }, 50);
     }
 
     function check(selected, correct) {
         clearInterval(timerInterval);
-        const endTime = Date.now();
-        const timeSpent = ((endTime - startTime) / 1000).toFixed(2);
+
+        const cleanCorrect = deepClean(correct);
         const msg = document.getElementById('time-result');
 
-        const buttons = document.querySelectorAll('.option-btn');
-        buttons.forEach(b => b.disabled = true);
+        document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
 
-        if (selected === correct) {
+        if (selected === cleanCorrect) {
             score += 10;
             document.getElementById('score-value').innerText = score;
-            msg.innerText = `✅ ¡Correcto! (${timeSpent}s)`;
+            msg.innerText = "✅ ¡Correcto!";
             msg.style.color = "var(--accent-green)";
         } else {
-            msg.innerText = `❌ Error. Era: ${correct}`;
+            msg.innerText = `❌ Incorrecto. Respuesta: ${cleanCorrect}`;
             msg.style.color = "var(--text-red)";
         }
-        
+
         setTimeout(() => {
             msg.style.color = "var(--text-dim)";
             fetchNewQuestion();
-        }, 1800);
+        }, 2200);
     }
 
-    // Retraso inicial para estabilizar la carga
-    setTimeout(fetchNewQuestion, 300);
+    // Inicio automático
+    setTimeout(fetchNewQuestion, 500);
 </script>
 
 </body>
