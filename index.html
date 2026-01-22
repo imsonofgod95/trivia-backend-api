@@ -3,258 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QBIT TRIVIA</title>
+    <title>Qbit Trivia Premium</title>
     <style>
+        /* Paleta Premium Black & Neon */
         :root {
-            --bg-color: #1a1f32;
-            --card-bg: #242b42;
-            --accent-color: #ff5e78; /* El color coral de tu foto */
+            --bg-color: #0b0b0b;
+            --card-bg: #161616;
+            --primary-accent: #bb86fc; /* Morado neón */
+            --secondary-accent: #03dac6; /* Cian neón */
             --text-main: #ffffff;
-            --btn-bg: #1e3a8a;
-            --btn-hover: #2563eb;
+            --text-dim: #a0a0a0;
         }
 
         body {
-            font-family: 'Arial', sans-serif;
             background-color: var(--bg-color);
             color: var(--text-main);
+            font-family: 'Inter', -apple-system, sans-serif;
             display: flex;
-            justify-content: center;
             align-items: center;
+            justify-content: center;
             min-height: 100vh;
             margin: 0;
-            padding: 15px;
         }
 
-        .container {
+        .card {
             background-color: var(--card-bg);
-            width: 100%;
-            max-width: 380px;
-            padding: 30px;
-            border-radius: 25px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            padding: 2.5rem;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            width: 90%;
+            max-width: 450px;
+            border: 1px solid #333;
+            transition: transform 0.3s ease;
         }
 
-        h1 {
-            font-size: 2rem;
-            letter-spacing: 2px;
-            margin-bottom: 5px;
-            font-weight: 800;
-        }
+        h2 { font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--primary-accent); }
 
-        #puntos-display {
-            font-size: 1rem;
-            color: #aaa;
-            margin-bottom: 20px;
-        }
-
-        select {
-            background-color: #1e293b;
-            color: white;
-            border: 1px solid #334155;
-            padding: 10px;
-            border-radius: 8px;
-            width: 80%;
-            margin-bottom: 15px;
-            font-size: 0.9rem;
-        }
-
-        .meta-info {
-            font-size: 0.75rem;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 20px;
-        }
-
-        #contenedor-tiempo {
-            width: 100%;
-            height: 6px;
-            background: #334155;
-            border-radius: 3px;
-            margin-bottom: 25px;
-            overflow: hidden;
-        }
-
-        #barra-tiempo {
-            width: 100%;
-            height: 100%;
-            background: #4ade80;
-            transition: width 0.1s linear;
-        }
-
-        #pregunta {
-            color: var(--accent-color);
-            font-size: 1.4rem;
-            font-weight: bold;
-            margin-bottom: 30px;
-            line-height: 1.3;
-        }
-
-        .opciones-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .btn-opt {
-            background-color: #1e3a8a; /* Azul oscuro de los botones */
-            color: white;
-            padding: 16px;
-            border-radius: 12px;
-            border: none;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .btn-opt:hover {
-            background-color: var(--btn-hover);
-        }
-
-        #feedback {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 10px;
-            display: none;
-            font-weight: bold;
-            font-size: 0.9rem;
-        }
-
-        .correct { background: #065f46; color: #34d399; }
-        .wrong { background: #7f1d1d; color: #f87171; }
-
-        #btn-siguiente {
-            margin-top: 15px;
-            width: 100%;
+        .option-btn {
+            background-color: #252525;
+            color: var(--text-main);
+            border: 1px solid #444;
             padding: 14px;
-            background-color: #ffffff;
-            color: #1a1f32;
-            border: none;
-            border-radius: 10px;
-            font-weight: bold;
+            margin: 8px 0;
+            border-radius: 12px;
             cursor: pointer;
-            display: none;
+            width: 100%;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .option-btn:hover {
+            background-color: var(--primary-accent);
+            color: #000;
+            transform: translateY(-2px);
+        }
+
+        .score-panel {
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+            color: var(--secondary-accent);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .next-btn {
+            background: transparent;
+            color: var(--text-dim);
+            border: none;
+            margin-top: 15px;
+            text-decoration: underline;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>QBIT TRIVIA</h1>
-        <div id="puntos-display">PUNTOS: 0</div>
-
-        <select id="idioma" onchange="nuevaPregunta()">
-            <option value="es">🇲🇽 México (Español)</option>
-            <option value="en">🇺🇸 USA (English)</option>
-        </select>
-
-        <div class="meta-info">Cultura General • Easy</div>
-
-        <div id="contenedor-tiempo"><div id="barra-tiempo"></div></div>
-
-        <div id="pregunta">Cargando desafío...</div>
-        
-        <div id="opciones" class="opciones-grid"></div>
-
-        <div id="feedback"></div>
-        <button id="btn-siguiente" onclick="nuevaPregunta()">SIGUIENTE PREGUNTA →</button>
+    <div class="card">
+        <h2 id="question">Cargando desafío...</h2>
+        <div id="options-container"></div>
+        <div class="score-panel">SCORE: <span id="score-value">0</span></div>
+        <button class="next-btn" onclick="fetchNewQuestion()">Saltar pregunta</button>
     </div>
 
     <script>
-        let puntos = 0;
-        let idPregunta = null;
-        let tiempoInicio = 0;
-        let intervalo;
-        let respondido = false;
-        const TIEMPO_LIMITE = 15;
+        let currentScore = 0;
+        const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
 
-        function nuevaPregunta() {
-            respondido = false;
-            document.getElementById('feedback').style.display = 'none';
-            document.getElementById('btn-siguiente').style.display = 'none';
+        async function fetchNewQuestion() {
+            const questionElement = document.getElementById('question');
+            const optionsContainer = document.getElementById('options-container');
             
-            const lang = document.getElementById('idioma').value;
-            const region = lang === 'es' ? 'MX' : 'US';
+            questionElement.style.opacity = "0.5";
             
-            fetch(`https://qbit-e6gb.onrender.com/pregunta-random?idioma=${lang}&region=${region}`)
-                .then(res => res.json())
-                .then(data => {
-                    idPregunta = data.id;
-                    document.getElementById('pregunta').innerText = data.pregunta;
-                    const container = document.getElementById('opciones');
-                    container.innerHTML = '';
-                    
-                    data.opciones.forEach(opt => {
-                        const btn = document.createElement('button');
-                        btn.className = 'btn-opt';
-                        btn.innerText = opt;
-                        btn.onclick = () => validar(opt);
-                        container.appendChild(btn);
-                    });
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
 
-                    resetCronometro();
+                questionElement.innerText = data.pregunta;
+                questionElement.style.opacity = "1";
+                optionsContainer.innerHTML = "";
+
+                data.opciones.forEach(option => {
+                    const btn = document.createElement('button');
+                    btn.className = 'option-btn';
+                    btn.innerText = option;
+                    btn.onclick = () => checkAnswer(option, data.correcta);
+                    optionsContainer.appendChild(btn);
                 });
+            } catch (error) {
+                questionElement.innerText = "Error de conexión con la base de datos.";
+            }
         }
 
-        function resetCronometro() {
-            clearInterval(intervalo);
-            let restante = TIEMPO_LIMITE;
-            tiempoInicio = performance.now();
-            const barra = document.getElementById('barra-tiempo');
-            barra.style.background = "#4ade80";
-            
-            intervalo = setInterval(() => {
-                if(respondido) return;
-                restante -= 0.1;
-                let pct = (restante / TIEMPO_LIMITE) * 100;
-                barra.style.width = pct + "%";
-                
-                if(pct < 30) barra.style.background = "#f87171";
-
-                if(restante <= 0) {
-                    clearInterval(intervalo);
-                    mostrarFeedback(false, "¡TIEMPO AGOTADO!");
-                }
-            }, 100);
+        function checkAnswer(selected, correct) {
+            if (selected === correct) {
+                currentScore += 10;
+                document.getElementById('score-value').innerText = currentScore;
+                fetchNewQuestion();
+            } else {
+                alert("Respuesta incorrecta. ¡Sigue intentando!");
+                fetchNewQuestion();
+            }
         }
 
-        function validar(elegida) {
-            if(respondido) return;
-            respondido = true;
-            clearInterval(intervalo);
-            
-            const ms = Math.round(performance.now() - tiempoInicio);
-
-            fetch('https://qbit-e6gb.onrender.com/validar-respuesta', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    pregunta_id: idPregunta,
-                    respuesta_elegida: elegida,
-                    tiempo_ms: ms
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                mostrarFeedback(data.resultado, data.resultado ? `¡CORRECTO! +${data.puntos_obtenidos} PTS` : `ERROR. LA RESPUESTA ERA: ${data.correcta_era}`);
-                if(data.resultado) {
-                    puntos += data.puntos_obtenidos;
-                    document.getElementById('puntos-display').innerText = `PUNTOS: ${puntos}`;
-                }
-            });
-        }
-
-        function mostrarFeedback(esCorrecto, mensaje) {
-            const f = document.getElementById('feedback');
-            f.innerText = mensaje;
-            f.className = esCorrecto ? 'correct' : 'wrong';
-            f.style.display = 'block';
-            document.getElementById('btn-siguiente').style.display = 'block';
-        }
-
-        window.onload = nuevaPregunta;
+        fetchNewQuestion();
     </script>
 </body>
 </html>
