@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QBIT TRIVIA - Pro Edition</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 :root{
@@ -24,7 +25,7 @@ justify-content:center;
 align-items:center;
 min-height:100vh;
 margin:0;
-overflow:hidden;
+overflow-y: auto;
 }
 
 .timer-container{
@@ -33,6 +34,7 @@ height:8px;
 background:#1e2640;
 position:absolute;
 top:0;left:0;
+z-index: 10;
 }
 #timer-bar{
 width:100%;
@@ -43,13 +45,14 @@ transition:width .1s linear;
 
 .container{
 background:var(--card-bg);
-width:90%;
-max-width:420px;
+width:95%;
+max-width:500px;
 padding:30px;
 border-radius:20px;
 text-align:center;
 box-shadow:0 15px 40px rgba(0,0,0,.6);
 position:relative;
+margin: 20px 0;
 }
 
 .hidden{display:none}
@@ -99,9 +102,12 @@ input{
 padding:12px;
 border-radius:10px;
 border:none;
-width:100%;
+width:90%;
 margin:15px 0;
 font-size:1rem;
+background: #1e2640;
+color: white;
+text-align: center;
 }
 button.start-btn{
 background:var(--accent-green);
@@ -119,6 +125,14 @@ font-size:.85rem;
 margin-top:10px;
 text-align:left;
 }
+
+.chart-box {
+    margin: 20px 0;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+}
+canvas { max-width: 100%; }
 </style>
 </head>
 
@@ -126,15 +140,13 @@ text-align:left;
 
 <div class="timer-container"><div id="timer-bar"></div></div>
 
-<!-- MENÚ -->
 <div class="container" id="menu">
 <h1>QBIT TRIVIA</h1>
-<p style="color:var(--text-dim)">Pon a prueba tu velocidad mental</p>
-<input id="playerName" placeholder="Ingresa tu nombre">
-<button class="start-btn" onclick="startGame()">Iniciar partida</button>
+<p style="color:var(--text-dim)">¡Prepárate para el desafío más divertido!</p>
+<input id="playerName" placeholder="Escribe tu apodo aquí">
+<button class="start-btn" onclick="startGame()">¡A Jugar!</button>
 </div>
 
-<!-- JUEGO -->
 <div class="container hidden" id="game">
 <h1>QBIT TRIVIA</h1>
 <div id="question">Cargando...</div>
@@ -142,26 +154,34 @@ text-align:left;
 <div id="options-container"></div>
 
 <div class="score-bar">
-<span><span id="player-label"></span> • SCORE: <span id="score-value">0</span></span>
+<span><span id="player-label"></span> • PUNTOS: <span id="score-value">0</span></span>
 <span id="counter">1 / 10</span>
 </div>
 
 <div id="time-result" class="time-msg"></div>
 </div>
 
-<!-- FINAL -->
 <div class="container hidden" id="end">
-<h1>🏁 Fin de la partida</h1>
+<h1>🏁 ¡Partida Terminada!</h1>
 <p id="final-player"></p>
-<p id="final-score"></p>
+<p id="final-score" style="font-size: 1.5rem; color: var(--accent-green)"></p>
 
-<h3>🏆 Ranking</h3>
-<div id="ranking" class="rank"></div>
-
-<button class="start-btn" onclick="restart()">Volver a intentar</button>
+<div class="chart-box">
+    <p style="font-size: 0.8rem; color: var(--text-dim)">¿EN QUÉ ERES CRACK?</p>
+    <canvas id="radarChart"></canvas>
 </div>
 
-<!-- SONIDOS -->
+<div class="chart-box">
+    <p style="font-size: 0.8rem; color: var(--text-dim)">TUS REFLEJOS (SEGUNDOS)</p>
+    <canvas id="barChart"></canvas>
+</div>
+
+<h3>🏆 Los Mejores de Hoy</h3>
+<div id="ranking" class="rank"></div>
+
+<button class="start-btn" onclick="restart()">¡Quiero revancha!</button>
+</div>
+
 <audio id="snd-ok" src="https://assets.mixkit.co/sfx/preview/mixkit-audience-clapping-strongly-476.mp3"></audio>
 <audio id="snd-bad" src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"></audio>
 <audio id="snd-time" src="https://assets.mixkit.co/sfx/preview/mixkit-warning-alarm-buzzer-991.mp3"></audio>
@@ -174,14 +194,21 @@ const MAX_QUESTIONS=10;
 const TIME_LIMIT=15;
 const API_URL="https://qbit-e6gb.onrender.com/pregunta-random";
 
+let gameData = {
+    labels: [],
+    times: [],
+    accuracy: {}
+};
+
 function startGame(){
 score=0; streak=0; questionCount=0;
+gameData = { labels: [], times: [], accuracy: {} };
 document.getElementById("score-value").innerText=0;
 document.getElementById("menu").classList.add("hidden");
 document.getElementById("end").classList.add("hidden");
 document.getElementById("game").classList.remove("hidden");
 document.getElementById("player-label").innerText=
-document.getElementById("playerName").value||"Jugador";
+document.getElementById("playerName").value||"Jugador Estrella";
 fetchNewQuestion();
 }
 
@@ -202,34 +229,43 @@ return[];
 }
 
 async function fetchNewQuestion(){
-if(questionCount>=MAX_QUESTIONS)return endGame();
+if(questionCount>=MAX_QUESTIONS) return endGame();
 questionCount++;
-document.getElementById("counter").innerText=`${questionCount} / ${MAX_QUESTIONS}`;
+document.getElementById("counter").innerText=`Pregunta ${questionCount} de ${MAX_QUESTIONS}`;
 
 clearInterval(timer);
 const opt=document.getElementById("options-container");
 const bar=document.getElementById("timer-bar");
 const msg=document.getElementById("time-result");
 opt.innerHTML="";
-msg.innerText="";
+msg.innerText="¡Concéntrate!";
 bar.style.width="100%";
 
-const r=await fetch(API_URL+"?t="+Date.now());
-const d=await r.json();
+try {
+    const r=await fetch(API_URL+"?t="+Date.now());
+    const d=await r.json();
 
-document.getElementById("question").innerText=deepClean(d.pregunta);
-document.getElementById("meta-container").innerText=`${d.categoria} • ${d.dificultad}`;
+    const categoria = deepClean(d.categoria);
+    document.getElementById("question").innerText=deepClean(d.pregunta);
+    document.getElementById("meta-container").innerText=`Categoría: ${categoria}`;
 
-parseOptions(d.opciones).forEach(o=>{
-const b=document.createElement("button");
-b.className="option-btn";
-b.innerText=o;
-b.onclick=()=>check(o,d.correcta);
-opt.appendChild(b);
-});
+    if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
+    gameData.accuracy[categoria].total++;
+    gameData.currentCat = categoria;
 
-startTime=Date.now();
-startTimer();
+    parseOptions(d.opciones).forEach(o=>{
+        const b=document.createElement("button");
+        b.className="option-btn";
+        b.innerText=o;
+        b.onclick=()=>check(o,d.correcta);
+        opt.appendChild(b);
+    });
+
+    startTime=Date.now();
+    startTimer();
+} catch (e) {
+    document.getElementById("question").innerText="¡Ups! El servidor se tomó un descanso. Reintenta.";
+}
 }
 
 function startTimer(){
@@ -238,10 +274,12 @@ timer=setInterval(()=>{
 const t=(Date.now()-startTime)/1000;
 bar.style.width=Math.max(0,(1-t/TIME_LIMIT)*100)+"%";
 if(t>=TIME_LIMIT){
-clearInterval(timer);
-streak=0;
-document.getElementById("snd-time").play();
-setTimeout(fetchNewQuestion,1500);
+    clearInterval(timer);
+    streak=0;
+    gameData.times.push(TIME_LIMIT);
+    document.getElementById("time-result").innerText="⏰ ¡Se acabó el tiempo!";
+    document.getElementById("snd-time").play();
+    setTimeout(fetchNewQuestion,1500);
 }
 },50);
 }
@@ -249,29 +287,35 @@ setTimeout(fetchNewQuestion,1500);
 function check(sel,correct){
 clearInterval(timer);
 const cleanCorrect=deepClean(correct);
-const time=(Date.now()-startTime)/1000;
-let pts=Math.max(2,Math.ceil((TIME_LIMIT-time)*2));
+const timeSpent=(Date.now()-startTime)/1000;
+gameData.times.push(timeSpent.toFixed(2));
+
+let pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
 const msg=document.getElementById("time-result");
 const card=document.getElementById("game");
 
 if(sel===cleanCorrect){
-streak++;
-if(streak%3===0){pts+=10; msg.innerText=`🔥 BONUS +10 pts\n`;}
-score+=pts;
-document.getElementById("score-value").innerText=score;
-document.getElementById("snd-ok").play();
-msg.innerText+=`✅ Correcto | +${pts} pts`;
-card.classList.add("flash-success");
-}else{
-streak=0;
-document.getElementById("snd-bad").play();
-msg.innerText=`❌ Incorrecto\n✔ Respuesta correcta: ${cleanCorrect}`;
-card.classList.add("flash-error");
+    streak++;
+    gameData.accuracy[gameData.currentCat].correct++;
+    let frases = ["¡Genio!", "¡Impresionante!", "¡A la primera!", "¡Qué nivel!", "¡Estás on fire!"];
+    let randomFrase = frases[Math.floor(Math.random()*frases.length)];
+    
+    if(streak%3===0){pts+=10; msg.innerText=`🔥 ¡RACHA DE 3! +10 extras\n`;}
+    score+=pts;
+    document.getElementById("score-value").innerText=score;
+    document.getElementById("snd-ok").play();
+    msg.innerText+=`✅ ${randomFrase} +${pts} pts`;
+    card.classList.add("flash-success");
+} else {
+    streak=0;
+    document.getElementById("snd-bad").play();
+    msg.innerText=`❌ ¡Casi! La respuesta era: ${cleanCorrect}`;
+    card.classList.add("flash-error");
 }
 
 setTimeout(()=>{
-card.classList.remove("flash-success","flash-error");
-fetchNewQuestion();
+    card.classList.remove("flash-success","flash-error");
+    fetchNewQuestion();
 },2200);
 }
 
@@ -280,8 +324,8 @@ clearInterval(timer);
 document.getElementById("game").classList.add("hidden");
 document.getElementById("end").classList.remove("hidden");
 const name=document.getElementById("player-label").innerText;
-document.getElementById("final-player").innerText=`Jugador: ${name}`;
-document.getElementById("final-score").innerText=`Puntaje final: ${score}`;
+document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
+document.getElementById("final-score").innerText=`Sumaste ${score} puntos`;
 
 let ranking=JSON.parse(localStorage.getItem("qbit-ranking")||"[]");
 ranking.push({name,score});
@@ -291,6 +335,49 @@ localStorage.setItem("qbit-ranking",JSON.stringify(ranking));
 
 document.getElementById("ranking").innerHTML=
 ranking.map((r,i)=>`${i+1}. ${r.name} — ${r.score} pts`).join("<br>");
+
+renderCharts();
+}
+
+function renderCharts() {
+    const ctxRadar = document.getElementById('radarChart').getContext('2d');
+    const labels = Object.keys(gameData.accuracy);
+    const accuracyData = labels.map(l => (gameData.accuracy[l].correct / gameData.accuracy[l].total) * 100);
+
+    new Chart(ctxRadar, {
+        type: 'radar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '% de Acierto',
+                data: accuracyData,
+                backgroundColor: 'rgba(0, 230, 118, 0.2)',
+                borderColor: '#00e676',
+                pointBackgroundColor: '#00e676'
+            }]
+        },
+        options: { 
+            scales: { r: { beginAtZero: true, max: 100, grid: {color: '#3d4670'}, ticks: {display: false} } },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    const ctxBar = document.getElementById('barChart').getContext('2d');
+    new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+            labels: gameData.times.map((_, i) => `Pregunta ${i+1}`),
+            datasets: [{
+                label: 'Segundos',
+                data: gameData.times,
+                backgroundColor: '#ff4d6d'
+            }]
+        },
+        options: { 
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, grid: {color: '#3d4670'} } }
+        }
+    });
 }
 </script>
 
