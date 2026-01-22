@@ -37,12 +37,14 @@ overflow-y: auto;
 }
 
 .logo-app {
-    width: 640px; /* EL DOBLE DE GRANDE QUE ANTES */
-    max-width: 100%; /* Asegura que se vea bien en móviles */
+    width: 640px; 
+    max-width: 100%; 
     height: auto;
     margin-bottom: 10px;
     filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.6));
     animation: float 3s ease-in-out infinite;
+    /* BLINDAJE: Si la imagen no carga, no se muestra el cuadro roto feo */
+    border: 0;
 }
 
 .timer-container{
@@ -74,7 +76,7 @@ transition:width .1s linear;
 .container{
 background:var(--card-bg);
 width:95%;
-max-width:700px; /* Aumentado para dar espacio al logo gigante */
+max-width:700px; 
 padding:30px;
 border-radius:20px;
 text-align:center;
@@ -175,7 +177,7 @@ canvas { max-width: 100%; }
 <div class="timer-container"><div id="timer-bar"></div></div>
 
 <div class="container" id="menu">
-    <img src="logo.png" alt="Logo QBIT" class="logo-app">
+    <img src="logo.png" onerror="this.src='https://i.ibb.co/LdpXW4P/logo-qbit.png'" alt="Logo QBIT" class="logo-app">
     <p style="color:var(--text-dim)">¡Prepárate para el desafío más divertido!</p>
     <input id="playerName" placeholder="Escribe tu apodo aquí">
     <button class="start-btn" onclick="startGame()">¡A Jugar!</button>
