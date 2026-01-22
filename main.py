@@ -1,12 +1,13 @@
-from fastapi import FastAPI, HTTPException
+# main.py actualizado para AUTOMATIZACIÓN
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import List
 import sqlite3
 import json
 
 app = FastAPI()
 
-# --- CONFIGURACIÓN DE SEGURIDAD (CORS) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,57 +15,70 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_NAME = "trivia_game.db"
+# --- MODELOS DE DATOS ---
+class PreguntaIA(BaseModel):
+    question_text: str
+    options: List[str]
+    correct_answer: str
+    category: str
+    difficulty: str
+    language_code: str
+    region_target: str
 
-# Modelo para recibir la respuesta del usuario
 class RespuestaUsuario(BaseModel):
     pregunta_id: int
     respuesta_elegida: str
+
+DB_NAME = "trivia_game.db"
 
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     conn.row_factory = sqlite3.Row 
     return conn
 
-@app.get("/")
-def home():
-    return {"mensaje": "¡Servidor Multilenguaje Activo!", "status": "online"}
+# --- RUTA SECRETA PARA AUTOMATIZAR (INYECCIÓN DE DATOS) ---
+@app.post("/admin/inyectar-preguntas")
+def inyectar_preguntas(preguntas: List[PreguntaIA], secret_key: str = Header(None)):
+    # Ciberseguridad básica: Solo tú puedes usar esta ruta
+    # Cambia 'Qbit2026' por la contraseña que quieras
+    if secret_key != "Qbit2026":
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        count = 0
+        for p in preguntas:
+            cursor.execute("""
+                INSERT INTO questions (question_text, options, correct_answer, category, difficulty, language_code, region_target)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (p.question_text, json.dumps(p.options), p.correct_answer, p.category, p.difficulty, p.language_code, p.region_target))
+            count += 1
+        conn.commit()
+        return {"mensaje": f"Se inyectaron {count} preguntas exitosamente"}
+    finally:
+        conn.close()
 
-# --- ENDPOINT 1: OBTENER PREGUNTA CON FILTROS ---
-# Ahora acepta ?idioma=es&region=MX en la URL
+# --- RUTAS DE JUEGO (IGUAL QUE ANTES) ---
 @app.get("/pregunta-random")
 def obtener_pregunta(idioma: str = "es", region: str = "MX"):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
     try:
-        # Buscamos preguntas que coincidan con el idioma y región solicitados
-        cursor.execute("""
-            SELECT * FROM questions 
-            WHERE language_code = ? AND region_target = ?
-            ORDER BY RANDOM() LIMIT 1
-        """, (idioma, region))
-        
+        cursor.execute("SELECT * FROM questions WHERE language_code = ? AND region_target = ? ORDER BY RANDOM() LIMIT 1", (idioma, region))
         row = cursor.fetchone()
-        
         if not row:
-            # Si no hay preguntas (ej. seleccionas Inglés y no has generado nada)
-            raise HTTPException(status_code=404, detail=f"No hay preguntas disponibles para {idioma}-{region}")
-            
-        opciones = json.loads(row["options"])
-        
+            raise HTTPException(status_code=404, detail="No hay preguntas")
         return {
             "id": row["id"],
             "pregunta": row["question_text"],
-            "opciones": opciones,
+            "opciones": json.loads(row["options"]),
             "categoria": row["category"],
             "dificultad": row["difficulty"]
-            # 🔒 NO enviamos la respuesta correcta
         }
     finally:
         conn.close()
 
-# --- ENDPOINT 2: VALIDAR RESPUESTA (JUEZ) ---
 @app.post("/validar-respuesta")
 def validar(datos: RespuestaUsuario):
     conn = get_db_connection()
@@ -72,16 +86,7 @@ def validar(datos: RespuestaUsuario):
     try:
         cursor.execute("SELECT correct_answer FROM questions WHERE id = ?", (datos.pregunta_id,))
         row = cursor.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail="Pregunta no encontrada")
-            
         correcta_real = row["correct_answer"]
-        es_correcta = (datos.respuesta_elegida == correcta_real)
-        
-        return {
-            "resultado": es_correcta,
-            "correcta_era": correcta_real if not es_correcta else None
-        }
+        return {"resultado": datos.respuesta_elegida == correcta_real, "correcta_era": correcta_real if datos.respuesta_elegida != correcta_real else None}
     finally:
         conn.close()
