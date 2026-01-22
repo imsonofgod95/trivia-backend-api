@@ -10,7 +10,7 @@
 <style>
 :root{
 --bg-dark:#0a0c14;
---card-bg: rgba(36, 42, 69, 0.7); /* Traslúcido para efecto cristal */
+--card-bg: rgba(36, 42, 69, 0.7);
 --text-red:#ff4d6d;
 --accent-green:#00e676;
 --btn-blue:#2d365d;
@@ -171,17 +171,20 @@ min-height:1.8rem;
     100% { transform: translateX(0); }
 }
 
-input{
+input, select {
 padding:15px;
 border-radius:12px;
 border:none;
 width:90%;
-margin:15px 0;
+margin:10px 0;
 font-size:1.1rem;
 background: #1e2640;
 color: white;
 text-align: center;
+appearance: none; /* Quitar estilo default en select */
 }
+
+select { cursor: pointer; border: 1px solid #3d4670; }
 
 button.start-btn{
 background:var(--accent-green);
@@ -192,7 +195,7 @@ border-radius:15px;
 font-weight:bold;
 font-size: 1.1rem;
 cursor:pointer;
-margin-top:10px;
+margin-top:15px;
 box-shadow: 0 5px 15px rgba(0, 230, 118, 0.3);
 }
 
@@ -212,8 +215,17 @@ canvas { max-width: 100%; }
 
 <div class="container" id="menu">
     <img src="logo.png" onerror="this.src='https://i.ibb.co/LdpXW4P/logo-qbit.png'" alt="Logo QBIT" class="logo-app">
-    <p style="color:var(--text-dim)">¡Prepárate para el desafío más divertido!</p>
+    <p style="color:var(--text-dim)">¡Personaliza tu partida!</p>
+    
     <input id="playerName" placeholder="Escribe tu apodo aquí">
+    
+    <select id="difficultySelect">
+        <option value="Random">Dificultad: Aleatoria 🎲</option>
+        <option value="Easy">Dificultad: Fácil 😊</option>
+        <option value="Medium">Dificultad: Media 😐</option>
+        <option value="Hard">Dificultad: Difícil 🔥</option>
+    </select>
+
     <button class="start-btn" onclick="startGame()">¡A Jugar!</button>
 </div>
 
@@ -260,6 +272,7 @@ canvas { max-width: 100%; }
 let score=0,startTime,timer;
 let questionCount=0;
 let streak=0;
+let chosenDifficulty = "Random";
 const MAX_QUESTIONS=10;
 const TIME_LIMIT=15;
 const API_URL="https://qbit-e6gb.onrender.com/pregunta-random";
@@ -286,163 +299,169 @@ function unlockAudio() {
 }
 
 function startGame(){
-unlockAudio();
-score=0; streak=0; questionCount=0;
-gameData = { labels: [], times: [], accuracy: {} };
-document.getElementById("score-value").innerText=0;
-document.getElementById("menu").classList.add("hidden");
-document.getElementById("end").classList.add("hidden");
-document.getElementById("game").classList.remove("hidden");
-document.getElementById("player-label").innerText=
-document.getElementById("playerName").value||"Jugador Estrella";
-fetchNewQuestion();
+    unlockAudio();
+    chosenDifficulty = document.getElementById("difficultySelect").value;
+    score=0; streak=0; questionCount=0;
+    gameData = { labels: [], times: [], accuracy: {} };
+    document.getElementById("score-value").innerText=0;
+    document.getElementById("menu").classList.add("hidden");
+    document.getElementById("end").classList.add("hidden");
+    document.getElementById("game").classList.remove("hidden");
+    document.getElementById("player-label").innerText=
+    document.getElementById("playerName").value||"Jugador Estrella";
+    fetchNewQuestion();
 }
 
 function restart(){
-document.getElementById("end").classList.add("hidden");
-document.getElementById("menu").classList.remove("hidden");
+    document.getElementById("end").classList.add("hidden");
+    document.getElementById("menu").classList.remove("hidden");
 }
 
 function deepClean(t){return t?.toString().trim().replace(/^['"]|['"]$/g,'')||""}
 
 function parseOptions(o){
-if(Array.isArray(o)&&o.length===1)return parseOptions(o[0]);
-if(Array.isArray(o))return o.map(deepClean);
-if(typeof o==="string"){
-try{return JSON.parse(o.replace(/'/g,'"')).map(deepClean)}catch{return[]}
-}
-return[];
+    if(Array.isArray(o)&&o.length===1)return parseOptions(o[0]);
+    if(Array.isArray(o))return o.map(deepClean);
+    if(typeof o==="string"){
+        try{return JSON.parse(o.replace(/'/g,'"')).map(deepClean)}catch{return[]}
+    }
+    return[];
 }
 
 async function fetchNewQuestion() {
-if(questionCount>=MAX_QUESTIONS) return endGame();
-questionCount++;
-document.getElementById("counter").innerText=`Pregunta ${questionCount} de ${MAX_QUESTIONS}`;
+    if(questionCount>=MAX_QUESTIONS) return endGame();
+    questionCount++;
+    document.getElementById("counter").innerText=`Pregunta ${questionCount} de ${MAX_QUESTIONS}`;
 
-clearInterval(timer);
-document.getElementById("snd-tick").pause();
-document.getElementById("timer-bar").classList.remove("timer-urgent");
+    clearInterval(timer);
+    document.getElementById("snd-tick").pause();
+    document.getElementById("timer-bar").classList.remove("timer-urgent");
 
-const opt=document.getElementById("options-container");
-const bar=document.getElementById("timer-bar");
-const msg=document.getElementById("time-result");
-opt.innerHTML = "";
-msg.innerText = "¡Concéntrate!";
-bar.style.width = "100%";
+    const opt=document.getElementById("options-container");
+    const bar=document.getElementById("timer-bar");
+    const msg=document.getElementById("time-result");
+    opt.innerHTML = "";
+    msg.innerText = "¡Concéntrate!";
+    bar.style.width = "100%";
 
-try {
-    const r=await fetch(API_URL+"?t="+Date.now());
-    const d=await r.json();
+    try {
+        // PASAMOS LA DIFICULTAD COMO PARÁMETRO A LA API
+        let url = `${API_URL}?t=${Date.now()}`;
+        if(chosenDifficulty !== "Random") {
+            url += `&difficulty=${chosenDifficulty}`;
+        }
 
-    const categoria = deepClean(d.category || d.categoria);
-    const dificultad = deepClean(d.difficulty || d.dificultad);
-    
-    document.getElementById("question").innerText=deepClean(d.question_text || d.pregunta);
-    // Aquí actualizamos el badge con ambos datos
-    document.getElementById("meta-container").innerText = `${categoria} • ${dificultad}`;
+        const r=await fetch(url);
+        const d=await r.json();
 
-    if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
-    gameData.accuracy[categoria].total++;
-    gameData.currentCat = categoria;
+        const categoria = deepClean(d.category || d.categoria);
+        const dificultad = deepClean(d.difficulty || d.dificultad);
+        
+        document.getElementById("question").innerText=deepClean(d.question_text || d.pregunta);
+        document.getElementById("meta-container").innerText = `${categoria} • ${dificultad}`;
 
-    parseOptions(d.options || d.opciones).forEach(o=>{
-        const b=document.createElement("button");
-        b.className="option-btn";
-        b.innerText=o;
-        b.onclick=()=>check(o, d.correct_answer || d.correcta);
-        opt.appendChild(b);
-    });
+        if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
+        gameData.accuracy[categoria].total++;
+        gameData.currentCat = categoria;
 
-    startTime=Date.now();
-    startTimer();
-} catch (e) {
-    document.getElementById("question").innerText="¡Error de conexión!";
-}
+        parseOptions(d.options || d.opciones).forEach(o=>{
+            const b=document.createElement("button");
+            b.className="option-btn";
+            b.innerText=o;
+            b.onclick=()=>check(o, d.correct_answer || d.correcta);
+            opt.appendChild(b);
+        });
+
+        startTime=Date.now();
+        startTimer();
+    } catch (e) {
+        document.getElementById("question").innerText="¡Error de conexión!";
+    }
 }
 
 function startTimer(){
-const bar=document.getElementById("timer-bar");
-timer=setInterval(()=>{
-const t=(Date.now()-startTime)/1000;
-const timeLeft = TIME_LIMIT - t;
-bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
+    const bar=document.getElementById("timer-bar");
+    timer=setInterval(()=>{
+        const t=(Date.now()-startTime)/1000;
+        const timeLeft = TIME_LIMIT - t;
+        bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
 
-if(timeLeft <= 5 && timeLeft > 0) {
-    bar.classList.add("timer-urgent");
-    document.getElementById("snd-tick").play().catch(()=>{});
-}
+        if(timeLeft <= 5 && timeLeft > 0) {
+            bar.classList.add("timer-urgent");
+            document.getElementById("snd-tick").play().catch(()=>{});
+        }
 
-if(t>=TIME_LIMIT){
-    clearInterval(timer);
-    document.getElementById("snd-tick").pause();
-    streak=0;
-    gameData.times.push(TIME_LIMIT);
-    document.getElementById("time-result").innerText="⏰ ¡TIEMPO!";
-    document.getElementById("snd-time").play().catch(()=>{});
-    setTimeout(fetchNewQuestion,1500);
-}
-},50);
+        if(t>=TIME_LIMIT){
+            clearInterval(timer);
+            document.getElementById("snd-tick").pause();
+            streak=0;
+            gameData.times.push(TIME_LIMIT);
+            document.getElementById("time-result").innerText="⏰ ¡TIEMPO!";
+            document.getElementById("snd-time").play().catch(()=>{});
+            setTimeout(fetchNewQuestion,1500);
+        }
+    },50);
 }
 
 function check(sel,correct){
-clearInterval(timer);
-document.getElementById("snd-tick").pause();
-const cleanCorrect=deepClean(correct);
-const timeSpent=(Date.now()-startTime)/1000;
-gameData.times.push(timeSpent.toFixed(2));
+    clearInterval(timer);
+    document.getElementById("snd-tick").pause();
+    const cleanCorrect=deepClean(correct);
+    const timeSpent=(Date.now()-startTime)/1000;
+    gameData.times.push(timeSpent.toFixed(2));
 
-let pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
-const msg=document.getElementById("time-result");
-const card=document.getElementById("game");
+    let pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
+    const msg=document.getElementById("time-result");
+    const card=document.getElementById("game");
 
-if(sel.trim()===cleanCorrect){
-    streak++;
-    gameData.accuracy[gameData.currentCat].correct++;
-    confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
+    if(sel.trim()===cleanCorrect){
+        streak++;
+        gameData.accuracy[gameData.currentCat].correct++;
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
 
-    if(streak%3===0) pts+=10; 
-    score+=pts;
-    document.getElementById("score-value").innerText=score;
-    document.getElementById("snd-ok").play().catch(()=>{});
-    msg.innerText=`✅ Correcto +${pts} pts`;
-    card.classList.add("flash-success");
-} else {
-    streak=0;
-    document.getElementById("snd-bad").play().catch(()=>{});
-    msg.innerText=`❌ Era: ${cleanCorrect}`;
-    card.classList.add("flash-error");
-}
+        if(streak%3===0) pts+=10; 
+        score+=pts;
+        document.getElementById("score-value").innerText=score;
+        document.getElementById("snd-ok").play().catch(()=>{});
+        msg.innerText=`✅ Correcto +${pts} pts`;
+        card.classList.add("flash-success");
+    } else {
+        streak=0;
+        document.getElementById("snd-bad").play().catch(()=>{});
+        msg.innerText=`❌ Era: ${cleanCorrect}`;
+        card.classList.add("flash-error");
+    }
 
-document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+    document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
 
-setTimeout(()=>{
-    card.classList.remove("flash-success","flash-error");
-    fetchNewQuestion();
-},2000);
+    setTimeout(()=>{
+        card.classList.remove("flash-success","flash-error");
+        fetchNewQuestion();
+    },2000);
 }
 
 function endGame(){
-clearInterval(timer);
-document.getElementById("snd-tick").pause();
-document.getElementById("game").classList.add("hidden");
-document.getElementById("end").classList.remove("hidden");
+    clearInterval(timer);
+    document.getElementById("snd-tick").pause();
+    document.getElementById("game").classList.add("hidden");
+    document.getElementById("end").classList.remove("hidden");
 
-confetti({ particleCount: 150, spread: 180, origin: { y: 0.6 } });
+    confetti({ particleCount: 150, spread: 180, origin: { y: 0.6 } });
 
-const name=document.getElementById("player-label").innerText;
-document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
-document.getElementById("final-score").innerText=`Sumaste ${score} puntos`;
+    const name=document.getElementById("player-label").innerText;
+    document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
+    document.getElementById("final-score").innerText=`Sumaste ${score} puntos`;
 
-let ranking=JSON.parse(localStorage.getItem("qbit-ranking")||"[]");
-ranking.push({name,score});
-ranking.sort((a,b)=>b.score-a.score);
-ranking=ranking.slice(0,5);
-localStorage.setItem("qbit-ranking",JSON.stringify(ranking));
+    let ranking=JSON.parse(localStorage.getItem("qbit-ranking")||"[]");
+    ranking.push({name,score});
+    ranking.sort((a,b)=>b.score-a.score);
+    ranking=ranking.slice(0,5);
+    localStorage.setItem("qbit-ranking",JSON.stringify(ranking));
 
-document.getElementById("ranking").innerHTML=
-ranking.map((r,i)=>`${i+1}. ${r.name} — ${r.score} pts`).join("<br>");
+    document.getElementById("ranking").innerHTML=
+    ranking.map((r,i)=>`${i+1}. ${r.name} — ${r.score} pts`).join("<br>");
 
-renderCharts();
+    renderCharts();
 }
 
 function renderCharts() {

@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 import sqlite3
 import random
 import pandas as pd
@@ -30,7 +30,7 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection()
-    # Crear la tabla con la estructura que definimos en Data Science
+    # Crear la tabla con la estructura necesaria
     conn.execute('''
         CREATE TABLE IF NOT EXISTS preguntas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +43,7 @@ def init_db():
         )
     ''')
     
-    # CARGA AUTOMÁTICA: Si la base está vacía, lee el CSV que subiste
+    # CARGA AUTOMÁTICA: Si la base está vacía, lee el CSV
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM preguntas")
     if cursor.fetchone()[0] == 0:
@@ -93,21 +93,27 @@ def health_check():
     }
 
 @app.get("/pregunta-random")
-def get_pregunta(lang: str = "es"):
+def get_pregunta(lang: str = "es", difficulty: Optional[str] = Query(None)):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM preguntas WHERE idioma = ?", (lang,))
+    
+    # LÓGICA DE FILTRADO POR DIFICULTAD E IDIOMA
+    if difficulty and difficulty != "Random":
+        cursor.execute("SELECT * FROM preguntas WHERE idioma = ? AND dificultad = ?", (lang, difficulty))
+    else:
+        cursor.execute("SELECT * FROM preguntas WHERE idioma = ?", (lang,))
+        
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
-        raise HTTPException(status_code=404, detail="No hay preguntas en este idioma.")
+        raise HTTPException(status_code=404, detail="No hay preguntas que coincidan con los criterios.")
 
     p = random.choice(rows)
     return {
         "id": p["id"],
         "pregunta": p["pregunta"],
-        "opciones": p["opciones"].split("|"),
+        "opciones": p["opciones"], # El front maneja el parseo
         "correcta": p["correcta"],
         "categoria": p["categoria"],
         "dificultad": p["dificultad"]
@@ -132,7 +138,7 @@ def inyectar_manual(paquete: Paquete):
 @app.post("/cargar-csv-emergencia")
 async def cargar_csv(secret_key: str, file: UploadFile = File(...)):
     if secret_key != "Qbit2026":
-        raise HTTPException(status_code=403)
+        raise HTTPException(status_code=403, detail="Llave secreta inválida")
     
     content = await file.read()
     df = pd.read_csv(io.BytesIO(content))
