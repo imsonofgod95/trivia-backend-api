@@ -1,326 +1,297 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QBIT TRIVIA - Pro Edition</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QBIT TRIVIA - Pro Edition</title>
 
-    <style>
-        :root {
-            --bg-dark: #1a1f32;
-            --card-bg: #242a45;
-            --text-red: #ff4d6d;
-            --accent-green: #00e676;
-            --btn-blue: #2d365d;
-            --text-dim: #8a94b8;
-        }
+<style>
+:root{
+--bg-dark:#1a1f32;
+--card-bg:#242a45;
+--text-red:#ff4d6d;
+--accent-green:#00e676;
+--btn-blue:#2d365d;
+--text-dim:#8a94b8;
+}
 
-        body {
-            background-color: var(--bg-dark);
-            color: white;
-            font-family: 'Arial Black', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            overflow: hidden;
-        }
+body{
+background:var(--bg-dark);
+color:white;
+font-family:'Arial Black',sans-serif;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+margin:0;
+overflow:hidden;
+}
 
-        .timer-container {
-            width: 100%;
-            height: 8px;
-            background-color: #1e2640;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
+.timer-container{
+width:100%;
+height:8px;
+background:#1e2640;
+position:absolute;
+top:0;left:0;
+}
+#timer-bar{
+width:100%;
+height:100%;
+background:var(--accent-green);
+transition:width .1s linear;
+}
 
-        #timer-bar {
-            width: 100%;
-            height: 100%;
-            background-color: var(--accent-green);
-            transition: width 0.1s linear;
-        }
+.container{
+background:var(--card-bg);
+width:90%;
+max-width:420px;
+padding:30px;
+border-radius:20px;
+text-align:center;
+box-shadow:0 15px 40px rgba(0,0,0,.6);
+position:relative;
+}
 
-        .container {
-            background-color: var(--card-bg);
-            width: 90%;
-            max-width: 420px;
-            padding: 30px;
-            border-radius: 20px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            position: relative;
-        }
+.hidden{display:none}
 
-        h1 {
-            letter-spacing: 3px;
-            font-size: 2.2rem;
-            margin-top: 0;
-        }
+.option-btn{
+background:var(--btn-blue);
+color:white;
+padding:14px;
+width:100%;
+margin-bottom:10px;
+border-radius:12px;
+border:2px solid transparent;
+font-weight:bold;
+cursor:pointer;
+transition:.2s;
+}
+.option-btn:hover:not(:disabled){
+background:#3d4670;
+border-color:var(--accent-green);
+transform:scale(1.02);
+}
+.option-btn:disabled{opacity:.6}
 
-        .language-selector {
-            background-color: #1e2640;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            border: 1px solid #3d4670;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
+.score-bar{
+margin-top:20px;
+padding-top:15px;
+border-top:2px solid #3d4670;
+display:flex;
+justify-content:space-between;
+color:var(--accent-green);
+font-family:sans-serif;
+font-weight:bold;
+}
 
-        select {
-            background: transparent;
-            color: white;
-            border: none;
-            font-size: 1rem;
-            cursor: pointer;
-            outline: none;
-        }
+.time-msg{
+font-size:.8rem;
+color:var(--text-dim);
+margin-top:10px;
+font-family:sans-serif;
+min-height:1.8rem;
+}
 
-        #question {
-            color: var(--text-red);
-            font-size: 1.35rem;
-            min-height: 90px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-top: 15px;
-        }
+.flash-success{box-shadow:0 0 30px var(--accent-green)}
+.flash-error{box-shadow:0 0 30px var(--text-red)}
 
-        .meta-info {
-            color: var(--text-dim);
-            font-family: sans-serif;
-            font-size: 0.75rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-        }
-
-        .option-btn {
-            background-color: var(--btn-blue);
-            color: white;
-            border: 2px solid transparent;
-            padding: 14px;
-            width: 100%;
-            margin-bottom: 10px;
-            border-radius: 12px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: Arial, sans-serif;
-            font-weight: bold;
-            display: block;
-        }
-
-        .option-btn:hover:not(:disabled) {
-            background-color: #3d4670;
-            border-color: var(--accent-green);
-            transform: scale(1.02);
-        }
-
-        .option-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .score-bar {
-            margin-top: 20px;
-            padding-top: 15px;
-            border-top: 2px solid #3d4670;
-            display: flex;
-            justify-content: space-between;
-            color: var(--accent-green);
-            font-family: sans-serif;
-            font-weight: bold;
-        }
-
-        .time-msg {
-            font-size: 0.8rem;
-            color: var(--text-dim);
-            margin-top: 10px;
-            font-family: sans-serif;
-            min-height: 1.2rem;
-        }
-
-        .skip-link {
-            color: var(--text-dim);
-            font-size: 0.7rem;
-            text-decoration: underline;
-            cursor: pointer;
-            display: block;
-            margin-top: 10px;
-        }
-    </style>
+input{
+padding:12px;
+border-radius:10px;
+border:none;
+width:100%;
+margin:15px 0;
+font-size:1rem;
+}
+button.start-btn{
+background:var(--accent-green);
+border:none;
+padding:14px;
+width:100%;
+border-radius:12px;
+font-weight:bold;
+cursor:pointer;
+margin-top:10px;
+}
+.rank{
+font-family:sans-serif;
+font-size:.85rem;
+margin-top:10px;
+text-align:left;
+}
+</style>
 </head>
 
 <body>
 
-<div class="timer-container">
-    <div id="timer-bar"></div>
+<div class="timer-container"><div id="timer-bar"></div></div>
+
+<!-- MENÚ -->
+<div class="container" id="menu">
+<h1>QBIT TRIVIA</h1>
+<p style="color:var(--text-dim)">Pon a prueba tu velocidad mental</p>
+<input id="playerName" placeholder="Ingresa tu nombre">
+<button class="start-btn" onclick="startGame()">Iniciar partida</button>
 </div>
 
-<div class="container">
-    <h1>QBIT TRIVIA</h1>
+<!-- JUEGO -->
+<div class="container hidden" id="game">
+<h1>QBIT TRIVIA</h1>
+<div id="question">Cargando...</div>
+<div id="meta-container" class="time-msg"></div>
+<div id="options-container"></div>
 
-    <div class="language-selector">
-        <span id="flag-icon">🇲🇽</span>
-        <select id="lang-select" onchange="updateLanguage()">
-            <option value="es">México (Español)</option>
-            <option value="en">USA (English)</option>
-        </select>
-    </div>
-
-    <div id="question">Cargando desafío...</div>
-    <div id="meta-container" class="meta-info">DATA SCIENCE • V11</div>
-
-    <div id="options-container"></div>
-
-    <div class="score-bar">
-        <span>SCORE: <span id="score-value">0</span></span>
-        <span>MODO BLINDADO</span>
-    </div>
-
-    <div id="time-result" class="time-msg">Responde antes de que se agote el tiempo</div>
-    <span class="skip-link" onclick="fetchNewQuestion()">Saltar pregunta</span>
+<div class="score-bar">
+<span><span id="player-label"></span> • SCORE: <span id="score-value">0</span></span>
+<span id="counter">1 / 10</span>
 </div>
+
+<div id="time-result" class="time-msg"></div>
+</div>
+
+<!-- FINAL -->
+<div class="container hidden" id="end">
+<h1>🏁 Fin de la partida</h1>
+<p id="final-player"></p>
+<p id="final-score"></p>
+
+<h3>🏆 Ranking</h3>
+<div id="ranking" class="rank"></div>
+
+<button class="start-btn" onclick="restart()">Volver a intentar</button>
+</div>
+
+<!-- SONIDOS -->
+<audio id="snd-ok" src="https://assets.mixkit.co/sfx/preview/mixkit-audience-clapping-strongly-476.mp3"></audio>
+<audio id="snd-bad" src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"></audio>
+<audio id="snd-time" src="https://assets.mixkit.co/sfx/preview/mixkit-warning-alarm-buzzer-991.mp3"></audio>
 
 <script>
-    let score = 0;
-    let startTime;
-    let timerInterval;
-    const TIME_LIMIT = 15;
-    const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
+let score=0,startTime,timer;
+let questionCount=0;
+let streak=0;
+const MAX_QUESTIONS=10;
+const TIME_LIMIT=15;
+const API_URL="https://qbit-e6gb.onrender.com/pregunta-random";
 
-    function deepClean(text) {
-        if (!text) return "";
-        return text.toString().trim().replace(/^['"]|['"]$/g, '');
-    }
+function startGame(){
+score=0; streak=0; questionCount=0;
+document.getElementById("score-value").innerText=0;
+document.getElementById("menu").classList.add("hidden");
+document.getElementById("end").classList.add("hidden");
+document.getElementById("game").classList.remove("hidden");
+document.getElementById("player-label").innerText=
+document.getElementById("playerName").value||"Jugador";
+fetchNewQuestion();
+}
 
-    // 🔥 FUNCIÓN DEFINITIVA (maneja TODOS los casos del backend)
-    function parseOptions(rawOptions) {
-        if (!rawOptions) return [];
+function restart(){
+document.getElementById("end").classList.add("hidden");
+document.getElementById("menu").classList.remove("hidden");
+}
 
-        // Caso CRÍTICO: ["['A','B','C']"]
-        if (Array.isArray(rawOptions) && rawOptions.length === 1 && typeof rawOptions[0] === "string") {
-            return parseOptions(rawOptions[0]);
-        }
+function deepClean(t){return t?.toString().trim().replace(/^['"]|['"]$/g,'')||""}
 
-        // Caso normal: ["A","B","C"]
-        if (Array.isArray(rawOptions)) {
-            return rawOptions.map(deepClean);
-        }
+function parseOptions(o){
+if(Array.isArray(o)&&o.length===1)return parseOptions(o[0]);
+if(Array.isArray(o))return o.map(deepClean);
+if(typeof o==="string"){
+try{return JSON.parse(o.replace(/'/g,'"')).map(deepClean)}catch{return[]}
+}
+return[];
+}
 
-        // Caso string Python: "['A','B','C']"
-        if (typeof rawOptions === "string") {
-            try {
-                const jsonSafe = rawOptions.replace(/'/g, '"');
-                const parsed = JSON.parse(jsonSafe);
-                return parsed.map(deepClean);
-            } catch (e) {
-                console.error("❌ Error parseando opciones:", rawOptions);
-                return [];
-            }
-        }
+async function fetchNewQuestion(){
+if(questionCount>=MAX_QUESTIONS)return endGame();
+questionCount++;
+document.getElementById("counter").innerText=`${questionCount} / ${MAX_QUESTIONS}`;
 
-        return [];
-    }
+clearInterval(timer);
+const opt=document.getElementById("options-container");
+const bar=document.getElementById("timer-bar");
+const msg=document.getElementById("time-result");
+opt.innerHTML="";
+msg.innerText="";
+bar.style.width="100%";
 
-    function updateLanguage() {
-        const lang = document.getElementById('lang-select').value;
-        document.getElementById('flag-icon').innerText = lang === 'es' ? '🇲🇽' : '🇺🇸';
-        fetchNewQuestion();
-    }
+const r=await fetch(API_URL+"?t="+Date.now());
+const d=await r.json();
 
-    async function fetchNewQuestion() {
-        clearInterval(timerInterval);
+document.getElementById("question").innerText=deepClean(d.pregunta);
+document.getElementById("meta-container").innerText=`${d.categoria} • ${d.dificultad}`;
 
-        const qText = document.getElementById('question');
-        const mText = document.getElementById('meta-container');
-        const optContainer = document.getElementById('options-container');
-        const bar = document.getElementById('timer-bar');
-        const msg = document.getElementById('time-result');
-        const lang = document.getElementById('lang-select').value;
+parseOptions(d.opciones).forEach(o=>{
+const b=document.createElement("button");
+b.className="option-btn";
+b.innerText=o;
+b.onclick=()=>check(o,d.correcta);
+opt.appendChild(b);
+});
 
-        optContainer.innerHTML = "";
-        qText.innerText = "Buscando datos...";
-        bar.style.width = "100%";
-        msg.innerText = "Sincronizando reloj...";
+startTime=Date.now();
+startTimer();
+}
 
-        try {
-            const res = await fetch(`${API_URL}?lang=${lang}&t=${Date.now()}`);
-            const data = await res.json();
+function startTimer(){
+const bar=document.getElementById("timer-bar");
+timer=setInterval(()=>{
+const t=(Date.now()-startTime)/1000;
+bar.style.width=Math.max(0,(1-t/TIME_LIMIT)*100)+"%";
+if(t>=TIME_LIMIT){
+clearInterval(timer);
+streak=0;
+document.getElementById("snd-time").play();
+setTimeout(fetchNewQuestion,1500);
+}
+},50);
+}
 
-            qText.innerText = deepClean(data.pregunta);
-            mText.innerText = `${deepClean(data.categoria)} • ${deepClean(data.dificultad)}`;
+function check(sel,correct){
+clearInterval(timer);
+const cleanCorrect=deepClean(correct);
+const time=(Date.now()-startTime)/1000;
+let pts=Math.max(2,Math.ceil((TIME_LIMIT-time)*2));
+const msg=document.getElementById("time-result");
+const card=document.getElementById("game");
 
-            const opciones = parseOptions(data.opciones);
+if(sel===cleanCorrect){
+streak++;
+if(streak%3===0){pts+=10; msg.innerText=`🔥 BONUS +10 pts\n`;}
+score+=pts;
+document.getElementById("score-value").innerText=score;
+document.getElementById("snd-ok").play();
+msg.innerText+=`✅ Correcto | +${pts} pts`;
+card.classList.add("flash-success");
+}else{
+streak=0;
+document.getElementById("snd-bad").play();
+msg.innerText=`❌ Incorrecto\n✔ Respuesta correcta: ${cleanCorrect}`;
+card.classList.add("flash-error");
+}
 
-            opciones.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = "option-btn";
-                btn.innerText = opt;
-                btn.onclick = () => check(opt, data.correcta);
-                optContainer.appendChild(btn);
-            });
+setTimeout(()=>{
+card.classList.remove("flash-success","flash-error");
+fetchNewQuestion();
+},2200);
+}
 
-            startTimer();
-            msg.innerText = "¡Tiempo real activo!";
-        } catch (err) {
-            qText.innerText = "❌ Error conectando con el servidor";
-            console.error(err);
-        }
-    }
+function endGame(){
+clearInterval(timer);
+document.getElementById("game").classList.add("hidden");
+document.getElementById("end").classList.remove("hidden");
+const name=document.getElementById("player-label").innerText;
+document.getElementById("final-player").innerText=`Jugador: ${name}`;
+document.getElementById("final-score").innerText=`Puntaje final: ${score}`;
 
-    function startTimer() {
-        startTime = Date.now();
-        const bar = document.getElementById('timer-bar');
-        const msg = document.getElementById('time-result');
+let ranking=JSON.parse(localStorage.getItem("qbit-ranking")||"[]");
+ranking.push({name,score});
+ranking.sort((a,b)=>b.score-a.score);
+ranking=ranking.slice(0,5);
+localStorage.setItem("qbit-ranking",JSON.stringify(ranking));
 
-        timerInterval = setInterval(() => {
-            const elapsed = (Date.now() - startTime) / 1000;
-            const timeLeft = TIME_LIMIT - elapsed;
-
-            bar.style.width = `${Math.max(0, (timeLeft / TIME_LIMIT) * 100)}%`;
-
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                msg.innerText = "❌ ¡TIEMPO AGOTADO!";
-                document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
-                setTimeout(fetchNewQuestion, 2000);
-            }
-        }, 50);
-    }
-
-    function check(selected, correct) {
-        clearInterval(timerInterval);
-
-        const cleanCorrect = deepClean(correct);
-        const msg = document.getElementById('time-result');
-
-        document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
-
-        if (selected === cleanCorrect) {
-            score += 10;
-            document.getElementById('score-value').innerText = score;
-            msg.innerText = "✅ ¡Correcto!";
-            msg.style.color = "var(--accent-green)";
-        } else {
-            msg.innerText = `❌ Incorrecto. Respuesta: ${cleanCorrect}`;
-            msg.style.color = "var(--text-red)";
-        }
-
-        setTimeout(() => {
-            msg.style.color = "var(--text-dim)";
-            fetchNewQuestion();
-        }, 2200);
-    }
-
-    // Inicio automático
-    setTimeout(fetchNewQuestion, 500);
+document.getElementById("ranking").innerHTML=
+ranking.map((r,i)=>`${i+1}. ${r.name} — ${r.score} pts`).join("<br>");
+}
 </script>
 
 </body>
