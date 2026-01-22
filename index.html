@@ -74,13 +74,12 @@
             font-size: 1.4rem;
             margin-top: 20px;
             margin-bottom: 5px;
-            min-height: 60px;
+            min-height: 80px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        /* NUEVA SECCIÓN DE METADATOS */
         .meta-info {
             color: var(--text-dim);
             font-family: sans-serif;
@@ -91,20 +90,27 @@
             margin-bottom: 25px;
         }
 
+        /* ESTILO DE LOS BOTONES DE OPCIÓN */
         .option-btn {
             background-color: var(--btn-blue);
             color: white;
-            border: none;
+            border: 2px solid transparent;
             padding: 16px;
             width: 100%;
             margin-bottom: 12px;
             border-radius: 12px;
-            font-size: 1.1rem;
+            font-size: 1rem;
             cursor: pointer;
-            transition: 0.2s;
+            transition: all 0.2s;
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
         }
 
-        .option-btn:hover { background-color: #3d4670; }
+        .option-btn:hover { 
+            background-color: #3d4670; 
+            border-color: var(--accent-green);
+            transform: scale(1.02);
+        }
 
         .score-bar {
             margin-top: 20px;
@@ -188,11 +194,13 @@
         const optContainer = document.getElementById('options-container');
         const lang = document.getElementById('lang-select').value;
         const bar = document.getElementById('timer-bar');
+        const msg = document.getElementById('time-result');
         
         optContainer.innerHTML = "";
         qText.innerText = "Buscando...";
         mText.innerText = "---";
         bar.style.width = "100%";
+        msg.innerText = "Preparando cronómetro...";
 
         try {
             const response = await fetch(`${API_URL}?lang=${lang}&t=${new Date().getTime()}`);
@@ -200,22 +208,25 @@
 
             qText.innerText = data.pregunta;
             
-            // ACTUALIZACIÓN DE METADATOS (CATEGORÍA Y DIFICULTAD)
             const categoria = data.categoria || "CULTURA GENERAL";
-            const dificultad = data.dificultad || "EASY";
+            const dificultad = data.dificultad || "MEDIUM";
             mText.innerText = `${categoria} • ${dificultad}`;
             
+            // GENERACIÓN DE BOTONES REALES
             data.opciones.forEach(opt => {
                 const btn = document.createElement('button');
                 btn.className = 'option-btn';
                 btn.innerText = opt;
+                // Al hacer clic, disparamos la verificación
                 btn.onclick = () => check(opt, data.correcta);
                 optContainer.appendChild(btn);
             });
 
             startTimer();
+            msg.innerText = "¡Corre el tiempo!";
         } catch (e) {
             qText.innerText = "Error: Servidor desconectado";
+            console.error(e);
         }
     }
 
@@ -231,7 +242,8 @@
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                fetchNewQuestion();
+                document.getElementById('time-result').innerText = "¡Tiempo agotado!";
+                setTimeout(fetchNewQuestion, 2000);
             }
         }, 100);
     }
@@ -240,18 +252,30 @@
         clearInterval(timerInterval);
         const endTime = Date.now();
         const timeSpent = ((endTime - startTime) / 1000).toFixed(2);
+        const msg = document.getElementById('time-result');
+
+        // Deshabilitamos botones para evitar múltiples clics
+        const buttons = document.querySelectorAll('.option-btn');
+        buttons.forEach(b => b.disabled = true);
 
         if (selected === correct) {
             score += 10;
             document.getElementById('score-value').innerText = score;
-            document.getElementById('time-result').innerText = `¡Correcto! Tardaste ${timeSpent} segundos.`;
-            setTimeout(fetchNewQuestion, 1500);
+            msg.innerText = `✅ ¡Correcto! Tardaste ${timeSpent}s.`;
+            msg.style.color = "var(--accent-green)";
         } else {
-            document.getElementById('time-result').innerText = `Incorrecto. Tardaste ${timeSpent}s en fallar.`;
-            setTimeout(fetchNewQuestion, 1500);
+            msg.innerText = `❌ Error. Era: ${correct}`;
+            msg.style.color = "var(--text-red)";
         }
+        
+        // Pausa breve para ver el resultado y cargar la siguiente
+        setTimeout(() => {
+            msg.style.color = "var(--text-dim)";
+            fetchNewQuestion();
+        }, 2000);
     }
 
+    // Iniciar juego automáticamente
     fetchNewQuestion();
 </script>
 
