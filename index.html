@@ -9,8 +9,8 @@
 
 <style>
 :root{
---bg-dark:#1a1f32;
---card-bg:#242a45;
+--bg-dark:#0a0c14;
+--card-bg: rgba(36, 42, 69, 0.7); /* Traslúcido para efecto cristal */
 --text-red:#ff4d6d;
 --accent-green:#00e676;
 --btn-blue:#2d365d;
@@ -18,7 +18,7 @@
 }
 
 body{
-background:var(--bg-dark);
+background: radial-gradient(circle at center, #1a1f32 0%, #0a0c14 100%);
 color:white;
 font-family:'Arial Black',sans-serif;
 display:flex;
@@ -29,7 +29,6 @@ margin:0;
 overflow-y: auto;
 }
 
-/* ANIMACIÓN DE FLOTADO PARA EL LOGO */
 @keyframes float {
     0% { transform: translateY(0px) rotate(0deg); }
     50% { transform: translateY(-15px) rotate(2deg); }
@@ -43,7 +42,6 @@ overflow-y: auto;
     margin-bottom: 10px;
     filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.6));
     animation: float 3s ease-in-out infinite;
-    /* BLINDAJE: Si la imagen no carga, no se muestra el cuadro roto feo */
     border: 0;
 }
 
@@ -74,37 +72,70 @@ transition:width .1s linear;
 }
 
 .container{
-background:var(--card-bg);
-width:95%;
-max-width:700px; 
-padding:30px;
-border-radius:20px;
-text-align:center;
-box-shadow:0 15px 40px rgba(0,0,0,.6);
-position:relative;
+background: var(--card-bg);
+backdrop-filter: blur(12px);
+-webkit-backdrop-filter: blur(12px);
+border: 1px solid rgba(255,255,255,0.1);
+width: 95%;
+max-width: 700px; 
+padding: 40px;
+border-radius: 30px;
+text-align: center;
+box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+position: relative;
 margin: 20px 0;
 transition: 0.3s;
 }
 
 .hidden{display:none}
 
+#question {
+    font-size: 1.8rem; 
+    line-height: 1.2;
+    color: white;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    margin: 30px 0;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#meta-container {
+    background: rgba(0, 230, 118, 0.15);
+    color: var(--accent-green);
+    padding: 8px 20px;
+    border-radius: 50px;
+    display: inline-block;
+    font-size: 0.9rem;
+    border: 1px solid var(--accent-green);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: bold;
+}
+
 .option-btn{
 background:var(--btn-blue);
 color:white;
-padding:14px;
+padding: 18px; 
 width:100%;
-margin-bottom:10px;
-border-radius:12px;
-border:2px solid transparent;
+margin-bottom:12px;
+border-radius:15px;
+border: 1px solid rgba(255,255,255,0.1);
 font-weight:bold;
+font-size: 1.1rem;
 cursor:pointer;
 transition:.2s;
+box-shadow: 0 4px 15px rgba(0,0,0,0.2);
 }
+
 .option-btn:hover:not(:disabled){
 background:#3d4670;
 border-color:var(--accent-green);
 transform:scale(1.02);
 }
+
 .option-btn:disabled{opacity:.6}
 
 .score-bar{
@@ -141,25 +172,28 @@ min-height:1.8rem;
 }
 
 input{
-padding:12px;
-border-radius:10px;
+padding:15px;
+border-radius:12px;
 border:none;
 width:90%;
 margin:15px 0;
-font-size:1rem;
+font-size:1.1rem;
 background: #1e2640;
 color: white;
 text-align: center;
 }
+
 button.start-btn{
 background:var(--accent-green);
 border:none;
-padding:14px;
+padding:16px;
 width:100%;
-border-radius:12px;
+border-radius:15px;
 font-weight:bold;
+font-size: 1.1rem;
 cursor:pointer;
 margin-top:10px;
+box-shadow: 0 5px 15px rgba(0, 230, 118, 0.3);
 }
 
 .chart-box {
@@ -184,8 +218,8 @@ canvas { max-width: 100%; }
 </div>
 
 <div class="container hidden" id="game">
+    <div id="meta-container">Cargando datos...</div> 
     <div id="question">Cargando desafío...</div>
-    <div id="meta-container" class="time-msg"></div>
     <div id="options-container"></div>
 
     <div class="score-bar">
@@ -244,9 +278,10 @@ function unlockAudio() {
         document.getElementById("snd-tick")
     ];
     audios.forEach(a => {
-        a.play().catch(()=>{});
-        a.pause();
-        a.currentTime = 0;
+        a.play().then(() => {
+            a.pause();
+            a.currentTime = 0;
+        }).catch(()=>{});
     });
 }
 
@@ -299,19 +334,22 @@ try {
     const r=await fetch(API_URL+"?t="+Date.now());
     const d=await r.json();
 
-    const categoria = deepClean(d.categoria);
-    document.getElementById("question").innerText=deepClean(d.pregunta);
-    document.getElementById("meta-container").innerText=`Categoría: ${categoria}`;
+    const categoria = deepClean(d.category || d.categoria);
+    const dificultad = deepClean(d.difficulty || d.dificultad);
+    
+    document.getElementById("question").innerText=deepClean(d.question_text || d.pregunta);
+    // Aquí actualizamos el badge con ambos datos
+    document.getElementById("meta-container").innerText = `${categoria} • ${dificultad}`;
 
     if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
     gameData.accuracy[categoria].total++;
     gameData.currentCat = categoria;
 
-    parseOptions(d.opciones).forEach(o=>{
+    parseOptions(d.options || d.opciones).forEach(o=>{
         const b=document.createElement("button");
         b.className="option-btn";
         b.innerText=o;
-        b.onclick=()=>check(o,d.correcta);
+        b.onclick=()=>check(o, d.correct_answer || d.correcta);
         opt.appendChild(b);
     });
 
@@ -331,7 +369,7 @@ bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
 
 if(timeLeft <= 5 && timeLeft > 0) {
     bar.classList.add("timer-urgent");
-    document.getElementById("snd-tick").play();
+    document.getElementById("snd-tick").play().catch(()=>{});
 }
 
 if(t>=TIME_LIMIT){
@@ -340,7 +378,7 @@ if(t>=TIME_LIMIT){
     streak=0;
     gameData.times.push(TIME_LIMIT);
     document.getElementById("time-result").innerText="⏰ ¡TIEMPO!";
-    document.getElementById("snd-time").play();
+    document.getElementById("snd-time").play().catch(()=>{});
     setTimeout(fetchNewQuestion,1500);
 }
 },50);
@@ -357,7 +395,7 @@ let pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
 const msg=document.getElementById("time-result");
 const card=document.getElementById("game");
 
-if(sel===cleanCorrect){
+if(sel.trim()===cleanCorrect){
     streak++;
     gameData.accuracy[gameData.currentCat].correct++;
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
@@ -365,12 +403,12 @@ if(sel===cleanCorrect){
     if(streak%3===0) pts+=10; 
     score+=pts;
     document.getElementById("score-value").innerText=score;
-    document.getElementById("snd-ok").play();
+    document.getElementById("snd-ok").play().catch(()=>{});
     msg.innerText=`✅ Correcto +${pts} pts`;
     card.classList.add("flash-success");
 } else {
     streak=0;
-    document.getElementById("snd-bad").play();
+    document.getElementById("snd-bad").play().catch(()=>{});
     msg.innerText=`❌ Era: ${cleanCorrect}`;
     card.classList.add("flash-error");
 }
