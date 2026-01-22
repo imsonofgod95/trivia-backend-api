@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Any
+from typing import List, Any, Optional
 import sqlite3
 import json
 
@@ -16,7 +16,6 @@ app.add_middleware(
 
 DB_NAME = "trivia_game.db"
 
-# --- FUNCIÓN QUE CREA LA TABLA SI NO EXISTE ---
 def inicializar_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -35,12 +34,12 @@ def inicializar_db():
     conn.commit()
     conn.close()
 
-# Ejecutamos la creación al iniciar el servidor
 inicializar_db()
 
-class LotePreguntas(BaseModel):
-    secret_key: str
-    preguntas: List[Any]
+class RespuestaUsuario(BaseModel):
+    pregunta_id: int
+    respuesta_elegida: str
+    tiempo_ms: int
 
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
@@ -49,39 +48,8 @@ def get_db_connection():
 
 @app.get("/")
 def home():
-    return {"mensaje": "Qbit API Online", "version": "6.0 (Auto-Repair Mode)"}
+    return {"mensaje": "Qbit API Online", "version": "7.5 (Full Timer Support)"}
 
-@app.post("/admin/inyectar-preguntas")
-def inyectar_preguntas(lote: LotePreguntas):
-    if lote.secret_key != "Qbit2026":
-        raise HTTPException(status_code=403, detail="Llave incorrecta")
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        count = 0
-        for p in lote.preguntas:
-            q_text = p.get("question_text", "Untitled")
-            opts = json.dumps(p.get("options", []))
-            correct = p.get("correct_answer", "")
-            cat = p.get("category", "General")
-            diff = p.get("difficulty", "Medium")
-            lang = p.get("language_code", "en")
-            reg = p.get("region_target", "US")
-
-            cursor.execute("""
-                INSERT INTO questions (question_text, options, correct_answer, category, difficulty, language_code, region_target)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (q_text, opts, correct, cat, diff, lang, reg))
-            count += 1
-        conn.commit()
-        return {"status": "success", "agregadas": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error DB: {str(e)}")
-    finally:
-        conn.close()
-
-# --- RUTAS DE JUEGO ---
 @app.get("/pregunta-random")
 def obtener_pregunta(idioma: str = "es", region: str = "MX"):
     conn = get_db_connection()
@@ -90,24 +58,32 @@ def obtener_pregunta(idioma: str = "es", region: str = "MX"):
         cursor.execute("SELECT * FROM questions WHERE language_code = ? AND region_target = ? ORDER BY RANDOM() LIMIT 1", (idioma, region))
         row = cursor.fetchone()
         if not row: raise HTTPException(status_code=404)
-        return {
-            "id": row["id"],
-            "pregunta": row["question_text"],
-            "opciones": json.loads(row["options"]),
-            "categoria": row["category"],
-            "dificultad": row["difficulty"]
-        }
+        return {"id": row["id"], "pregunta": row["question_text"], "opciones": json.loads(row["options"])}
     finally:
         conn.close()
 
 @app.post("/validar-respuesta")
-def validar(datos: dict):
+def validar(datos: RespuestaUsuario):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT correct_answer FROM questions WHERE id = ?", (datos['pregunta_id'],))
+        cursor.execute("SELECT correct_answer FROM questions WHERE id = ?", (datos.pregunta_id,))
         row = cursor.fetchone()
+        if not row: raise HTTPException(status_code=404)
+        
         correcta = row["correct_answer"]
-        return {"resultado": datos['respuesta_elegida'] == correcta, "correcta_era": correcta if datos['respuesta_elegida'] != correcta else None}
+        es_correcta = datos.respuesta_elegida == correcta
+        
+        puntos = 0
+        if es_correcta:
+            # Si contesta en menos de 15 segundos, gana entre 10 y 100 puntos
+            segundos = datos.tiempo_ms / 1000
+            puntos = max(10, int(100 - (segundos * 6)))
+
+        return {
+            "resultado": es_correcta,
+            "puntos_obtenidos": puntos,
+            "correcta_era": correcta if not es_correcta else None
+        }
     finally:
         conn.close()

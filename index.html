@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qbit Trivia Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        #marcador { font-size: 1.5rem; font-weight: bold; margin-bottom: 10px; color: #1a73e8; }
+        #contenedor-tiempo { width: 100%; height: 10px; background: #eee; border-radius: 5px; margin: 15px 0; overflow: hidden; }
+        #barra-tiempo { width: 100%; height: 100%; background: #4caf50; transition: width 0.1s linear; }
+        #pregunta { font-size: 1.2rem; margin-bottom: 20px; min-height: 60px; }
+        .opciones-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        button { padding: 12px; border: none; border-radius: 8px; background: #1a73e8; color: white; font-size: 1rem; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.98); background: #1557b0; }
+        select { padding: 8px; margin-bottom: 20px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div id="marcador">Puntos: 0</div>
+        
+        <select id="idioma" onchange="nuevaPregunta()">
+            <option value="es">Español (MX) 🇲🇽</option>
+            <option value="en">English (US) 🇺🇸</option>
+        </select>
+
+        <div id="contenedor-tiempo"><div id="barra-tiempo"></div></div>
+
+        <div id="pregunta">Cargando...</div>
+        <div id="opciones" class="opciones-grid"></div>
+    </div>
+
+    <script>
+        let puntos = 0;
+        let idPregunta = null;
+        let tiempoInicio = 0;
+        let intervalo;
+        const TIEMPO_LIMITE = 15; // segundos
+
+        function nuevaPregunta() {
+            const lang = document.getElementById('idioma').value;
+            const region = lang === 'es' ? 'MX' : 'US';
+            
+            fetch(`https://qbit-e6gb.onrender.com/pregunta-random?idioma=${lang}&region=${region}`)
+                .then(res => res.json())
+                .then(data => {
+                    idPregunta = data.id;
+                    document.getElementById('pregunta').innerText = data.pregunta;
+                    const container = document.getElementById('opciones');
+                    container.innerHTML = '';
+                    
+                    data.opciones.forEach(opt => {
+                        const btn = document.createElement('button');
+                        btn.innerText = opt;
+                        btn.onclick = () => validar(opt);
+                        container.appendChild(btn);
+                    });
+
+                    resetCronometro();
+                });
+        }
+
+        function resetCronometro() {
+            clearInterval(intervalo);
+            let restante = TIEMPO_LIMITE;
+            tiempoInicio = performance.now();
+            const barra = document.getElementById('barra-tiempo');
+            
+            intervalo = setInterval(() => {
+                restante -= 0.1;
+                let pct = (restante / TIEMPO_LIMITE) * 100;
+                barra.style.width = pct + "%";
+                
+                if(pct < 30) barra.style.background = "#ff5252";
+                else if(pct < 60) barra.style.background = "#ffd740";
+                else barra.style.background = "#4caf50";
+
+                if(restante <= 0) {
+                    clearInterval(intervalo);
+                    alert("¡Tiempo agotado!");
+                    nuevaPregunta();
+                }
+            }, 100);
+        }
+
+        function validar(elegida) {
+            clearInterval(intervalo);
+            const ms = Math.round(performance.now() - tiempoInicio);
+
+            fetch('https://qbit-e6gb.onrender.com/validar-respuesta', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    pregunta_id: idPregunta,
+                    respuesta_elegida: elegida,
+                    tiempo_ms: ms
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.resultado) {
+                    puntos += data.puntos_obtenidos;
+                    alert(`¡Correcto! +${data.puntos_obtenidos} pts`);
+                } else {
+                    alert(`Incorrecto. Era: ${data.correcta_era}`);
+                }
+                document.getElementById('marcador').innerText = `Puntos: ${puntos}`;
+                nuevaPregunta();
+            });
+        }
+
+        // Iniciar al cargar
+        window.onload = nuevaPregunta;
+    </script>
+</body>
+</html>
