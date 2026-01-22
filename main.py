@@ -2,12 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
+import sqlite3
 import random
 
 app = FastAPI()
 
-# --- CONFIGURACIÓN DE SEGURIDAD (CORS) ---
-# Permite que tu juego en GitHub Pages o local se conecte sin bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,86 +15,95 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- MODELOS DE DATOS ---
-class Pregunta(BaseModel):
+# --- INICIALIZACIÓN DE LA BASE DE DATOS ---
+def init_db():
+    conn = sqlite3.connect('trivia.db')
+    cursor = conn.cursor()
+    # Creamos la tabla con todos los campos que tu juego ya usa
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS preguntas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pregunta TEXT NOT NULL,
+            opciones TEXT NOT NULL,
+            correcta TEXT NOT NULL,
+            categoria TEXT,
+            dificultad TEXT,
+            idioma TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- MODELOS PARA RECIBIR DATOS ---
+class PreguntaSchema(BaseModel):
     question_text: str
     options: List[str]
     correct_answer: str
     category: str
     difficulty: str
     language_code: str
-    region_target: str
 
 class PaqueteInyeccion(BaseModel):
     secret_key: str
-    preguntas: List[Pregunta]
-
-# --- BASE DE DATOS EN MEMORIA ---
-# Iniciamos con la pregunta de Canadá por defecto
-db_preguntas = [
-    {
-        "id": 1,
-        "pregunta": "¿Cuál es la capital de Canadá?",
-        "opciones": ["Toronto", "Vancouver", "Montreal", "Ottawa"],
-        "correcta": "Ottawa",
-        "idioma": "es",
-        "region": "MX"
-    }
-]
-
-# Historial para evitar repeticiones en la misma sesión
-preguntas_vistas = []
+    preguntas: List[PreguntaSchema]
 
 # --- RUTAS ---
 
-@app.get("/")
-def home():
-    return {"status": "online", "server_time": "2026-01-22", "total_questions": len(db_preguntas)}
-
 @app.get("/pregunta-random")
 def obtener_pregunta(lang: str = "es"):
-    # Filtrar por idioma seleccionado en el juego
-    opciones = [p for p in db_preguntas if p.get("idioma") == lang]
-    
-    if not opciones:
-        opciones = db_preguntas # Si no hay del idioma, usar cualquiera
+    conn = sqlite3.connect('trivia.db')
+    cursor = conn.cursor()
+    # Obtenemos todas las preguntas del idioma seleccionado
+    cursor.execute("SELECT * FROM preguntas WHERE idioma = ?", (lang,))
+    filas = cursor.fetchall()
+    conn.close()
 
-    # Buscar preguntas que el usuario aún no haya visto
-    disponibles = [p for p in opciones if p.get("id") not in preguntas_vistas]
-    
-    # Si ya se mostraron todas, reiniciamos el historial
-    if not disponibles:
-        preguntas_vistas.clear()
-        disponibles = opciones
+    if not filas:
+        return {
+            "pregunta": "No hay preguntas cargadas aún",
+            "opciones": ["Inyecta datos", "desde Colab", "para jugar", "suerte"],
+            "correcta": "suerte",
+            "categoria": "SISTEMA",
+            "dificultad": "EASY"
+        }
 
-    seleccionada = random.choice(disponibles)
-    
-    # Registrar que ya se vio esta pregunta
-    if "id" in seleccionada:
-        preguntas_vistas.append(seleccionada["id"])
-        
-    return seleccionada
+    # Selección aleatoria pura
+    p = random.choice(filas)
+    return {
+        "id": p[0],
+        "pregunta": p[1],
+        "opciones": p[2].split("|"), # Convertimos el texto de la DB a lista
+        "correcta": p[3],
+        "categoria": p[4],
+        "dificultad": p[5]
+    }
 
 @app.post("/inyectar-preguntas")
 async def inyectar(paquete: PaqueteInyeccion):
-    # Verificación de seguridad con tu llave
     if paquete.secret_key != "Qbit2026":
-        raise HTTPException(status_code=403, detail="Llave secreta incorrecta")
+        raise HTTPException(status_code=403, detail="Llave incorrecta")
     
+    conn = sqlite3.connect('trivia.db')
+    cursor = conn.cursor()
     for p in paquete.preguntas:
-        nueva = {
-            "id": len(db_preguntas) + 1,
-            "pregunta": p.question_text,
-            "opciones": p.options,
-            "correcta": p.correct_answer,
-            "categoria": p.category,
-            "idioma": p.language_code,
-            "region": p.region_target
-        }
-        db_preguntas.append(nueva)
+        cursor.execute('''
+            INSERT INTO preguntas (pregunta, opciones, correcta, categoria, dificultad, idioma)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (p.question_text, "|".join(p.options), p.correct_answer, p.category, p.difficulty, p.language_code))
+    conn.commit()
     
-    return {"status": "success", "agregadas": len(paquete.preguntas), "total_actual": len(db_preguntas)}
+    cursor.execute("SELECT COUNT(*) FROM preguntas")
+    total = cursor.fetchone()[0]
+    conn.close()
+    return {"status": "success", "total_actual": total}
 
-@app.post("/validar-respuesta")
-def validar(datos: dict):
-    return {"status": "received"}
+@app.get("/")
+def estado():
+    conn = sqlite3.connect('trivia.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM preguntas")
+    total = cursor.fetchone()[0]
+    conn.close()
+    return {"status": "online", "total_preguntas": total}
