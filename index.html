@@ -3,131 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Qbit Trivia Premium</title>
+    <title>QBIT TRIVIA - Premium</title>
     <style>
-        /* Paleta Premium Black & Neon */
         :root {
-            --bg-color: #0b0b0b;
-            --card-bg: #161616;
-            --primary-accent: #bb86fc; /* Morado neón */
-            --secondary-accent: #03dac6; /* Cian neón */
-            --text-main: #ffffff;
-            --text-dim: #a0a0a0;
+            --bg-dark: #1a1f32;
+            --card-bg: #242a45;
+            --text-red: #ff4d6d;
+            --accent-green: #00e676;
+            --btn-blue: #2d365d;
         }
 
         body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Arial Black', sans-serif;
             display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             min-height: 100vh;
             margin: 0;
         }
 
-        .card {
+        .container {
             background-color: var(--card-bg);
-            padding: 2.5rem;
-            border-radius: 24px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
             width: 90%;
-            max-width: 450px;
-            border: 1px solid #333;
-            transition: transform 0.3s ease;
+            max-width: 400px;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        h2 { font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--primary-accent); }
+        h1 { letter-spacing: 3px; font-size: 2rem; margin-bottom: 10px; }
+
+        .country-badge {
+            background-color: #1e2640;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: inline-block;
+            border: 1px solid #3d4670;
+        }
+
+        .category-text {
+            color: #8a94b8;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        #question {
+            color: var(--text-red);
+            font-size: 1.4rem;
+            margin-bottom: 25px;
+            min-height: 60px;
+        }
 
         .option-btn {
-            background-color: #252525;
-            color: var(--text-main);
-            border: 1px solid #444;
-            padding: 14px;
-            margin: 8px 0;
-            border-radius: 12px;
-            cursor: pointer;
+            background-color: var(--btn-blue);
+            color: white;
+            border: none;
+            padding: 15px;
             width: 100%;
-            font-size: 1rem;
-            transition: all 0.2s ease;
+            margin-bottom: 12px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: 0.2s;
         }
 
-        .option-btn:hover {
-            background-color: var(--primary-accent);
-            color: #000;
-            transform: translateY(-2px);
-        }
+        .option-btn:hover { background-color: #3d4670; }
 
-        .score-panel {
+        .score-bar {
             margin-top: 25px;
             padding-top: 15px;
-            border-top: 1px solid #333;
-            color: var(--secondary-accent);
-            font-weight: bold;
-            letter-spacing: 1px;
+            border-top: 2px solid #3d4670;
+            display: flex;
+            justify-content: space-between;
+            color: var(--accent-green);
         }
 
-        .next-btn {
-            background: transparent;
-            color: var(--text-dim);
-            border: none;
-            margin-top: 15px;
+        .skip-text {
+            color: #8a94b8;
+            font-size: 0.8rem;
             text-decoration: underline;
             cursor: pointer;
+            display: block;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2 id="question">Cargando desafío...</h2>
-        <div id="options-container"></div>
-        <div class="score-panel">SCORE: <span id="score-value">0</span></div>
-        <button class="next-btn" onclick="fetchNewQuestion()">Saltar pregunta</button>
+<div class="container">
+    <h1>QBIT TRIVIA</h1>
+    
+    <div class="country-badge">
+        🇲🇽 México (Español)
     </div>
 
-    <script>
-        let currentScore = 0;
-        const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
+    <div class="category-text">CULTURA GENERAL • EASY</div>
 
-        async function fetchNewQuestion() {
-            const questionElement = document.getElementById('question');
-            const optionsContainer = document.getElementById('options-container');
-            
-            questionElement.style.opacity = "0.5";
-            
-            try {
-                const response = await fetch(API_URL);
-                const data = await response.json();
+    <div id="question">Cargando...</div>
 
-                questionElement.innerText = data.pregunta;
-                questionElement.style.opacity = "1";
-                optionsContainer.innerHTML = "";
+    <div id="options-container"></div>
 
-                data.opciones.forEach(option => {
-                    const btn = document.createElement('button');
-                    btn.className = 'option-btn';
-                    btn.innerText = option;
-                    btn.onclick = () => checkAnswer(option, data.correcta);
-                    optionsContainer.appendChild(btn);
-                });
-            } catch (error) {
-                questionElement.innerText = "Error de conexión con la base de datos.";
-            }
+    <div class="score-bar">
+        <span>SCORE: <span id="score-value">0</span></span>
+        <span style="color: #555;">v8.7</span>
+    </div>
+
+    <span class="skip-text" onclick="fetchNewQuestion()">Saltar pregunta</span>
+</div>
+
+<script>
+    let score = 0;
+    const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
+
+    async function fetchNewQuestion() {
+        const qText = document.getElementById('question');
+        const optContainer = document.getElementById('options-container');
+        
+        // Limpiamos antes de cargar
+        optContainer.innerHTML = "";
+        qText.innerText = "Buscando...";
+
+        try {
+            // Añadimos un pequeño truco para evitar que el navegador guarde la pregunta anterior (cache)
+            const response = await fetch(`${API_URL}?t=${new Date().getTime()}`);
+            const data = await response.json();
+
+            qText.innerText = data.pregunta;
+
+            data.opciones.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerText = opt;
+                btn.onclick = () => check(opt, data.correcta);
+                optContainer.appendChild(btn);
+            });
+        } catch (e) {
+            qText.innerText = "Error de conexión";
         }
+    }
 
-        function checkAnswer(selected, correct) {
-            if (selected === correct) {
-                currentScore += 10;
-                document.getElementById('score-value').innerText = currentScore;
-                fetchNewQuestion();
-            } else {
-                alert("Respuesta incorrecta. ¡Sigue intentando!");
-                fetchNewQuestion();
-            }
+    function check(selected, correct) {
+        if (selected === correct) {
+            score += 10;
+            document.getElementById('score-value').innerText = score;
+            // CAMBIO CLAVE: Al acertar, llama automáticamente a la siguiente
+            fetchNewQuestion();
+        } else {
+            alert("¡Incorrecto!");
+            fetchNewQuestion(); // También cambia si fallas para que no te atores
         }
+    }
 
-        fetchNewQuestion();
-    </script>
+    // Iniciar
+    fetchNewQuestion();
+</script>
+
 </body>
 </html>
