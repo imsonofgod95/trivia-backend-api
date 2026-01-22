@@ -11,6 +11,7 @@
             --text-red: #ff4d6d;
             --accent-green: #00e676;
             --btn-blue: #2d365d;
+            --text-dim: #8a94b8;
         }
 
         body {
@@ -52,13 +53,13 @@
             position: relative;
         }
 
-        h1 { letter-spacing: 3px; font-size: 2.2rem; margin-top: 0; }
+        h1 { letter-spacing: 3px; font-size: 2.2rem; margin-top: 0; margin-bottom: 10px; }
 
         .language-selector {
             background-color: #1e2640;
             padding: 10px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             border: 1px solid #3d4670;
             display: flex;
             align-items: center;
@@ -66,16 +67,28 @@
             gap: 10px;
         }
 
-        select { background: transparent; color: white; border: none; font-size: 1rem; cursor: pointer; }
+        select { background: transparent; color: white; border: none; font-size: 1rem; cursor: pointer; outline: none; }
 
         #question {
             color: var(--text-red);
-            font-size: 1.5rem;
-            margin: 20px 0;
-            min-height: 80px;
+            font-size: 1.4rem;
+            margin-top: 20px;
+            margin-bottom: 5px;
+            min-height: 60px;
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        /* NUEVA SECCIÓN DE METADATOS */
+        .meta-info {
+            color: var(--text-dim);
+            font-family: sans-serif;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 25px;
         }
 
         .option-btn {
@@ -106,9 +119,19 @@
 
         .time-msg {
             font-size: 0.8rem;
-            color: #8a94b8;
+            color: var(--text-dim);
             margin-top: 10px;
             font-family: sans-serif;
+            min-height: 1.2rem;
+        }
+
+        .skip-link {
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            text-decoration: underline;
+            cursor: pointer;
+            display: block;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -130,22 +153,25 @@
     </div>
 
     <div id="question">Cargando desafío...</div>
+    
+    <div id="meta-container" class="meta-info">CULTURA GENERAL • EASY</div>
 
     <div id="options-container"></div>
 
     <div class="score-bar">
         <span>SCORE: <span id="score-value">0</span></span>
-        <span>v9.0</span>
+        <span>v9.1</span>
     </div>
 
-    <div id="time-result" class="time-msg">Responde rápido para ganar más puntos</div>
+    <div id="time-result" class="time-msg">Responde antes de que se agote el tiempo</div>
+    <span class="skip-link" onclick="fetchNewQuestion()">Saltar pregunta</span>
 </div>
 
 <script>
     let score = 0;
     let startTime;
     let timerInterval;
-    const TIME_LIMIT = 15; // 15 segundos por pregunta
+    const TIME_LIMIT = 15;
     const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
 
     function updateLanguage() {
@@ -156,21 +182,28 @@
     }
 
     async function fetchNewQuestion() {
-        clearInterval(timerInterval); // Reset del tiempo
+        clearInterval(timerInterval);
         const qText = document.getElementById('question');
+        const mText = document.getElementById('meta-container');
         const optContainer = document.getElementById('options-container');
         const lang = document.getElementById('lang-select').value;
         const bar = document.getElementById('timer-bar');
         
         optContainer.innerHTML = "";
         qText.innerText = "Buscando...";
+        mText.innerText = "---";
         bar.style.width = "100%";
 
         try {
-            const response = await fetch(`${API_URL}?lang=${lang}&t=${Math.random()}`);
+            const response = await fetch(`${API_URL}?lang=${lang}&t=${new Date().getTime()}`);
             const data = await response.json();
 
             qText.innerText = data.pregunta;
+            
+            // ACTUALIZACIÓN DE METADATOS (CATEGORÍA Y DIFICULTAD)
+            const categoria = data.categoria || "CULTURA GENERAL";
+            const dificultad = data.dificultad || "EASY";
+            mText.innerText = `${categoria} • ${dificultad}`;
             
             data.opciones.forEach(opt => {
                 const btn = document.createElement('button');
@@ -180,9 +213,9 @@
                 optContainer.appendChild(btn);
             });
 
-            startTimer(); // Iniciamos cronómetro y barra
+            startTimer();
         } catch (e) {
-            qText.innerText = "Error: ¿Render está encendido?";
+            qText.innerText = "Error: Servidor desconectado";
         }
     }
 
@@ -198,7 +231,6 @@
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                alert("¡Se acabó el tiempo! ⏰");
                 fetchNewQuestion();
             }
         }, 100);
@@ -207,13 +239,13 @@
     function check(selected, correct) {
         clearInterval(timerInterval);
         const endTime = Date.now();
-        const timeSpent = ((endTime - startTime) / 1000).toFixed(2); // CALCULO DE TIEMPO
+        const timeSpent = ((endTime - startTime) / 1000).toFixed(2);
 
         if (selected === correct) {
             score += 10;
             document.getElementById('score-value').innerText = score;
             document.getElementById('time-result').innerText = `¡Correcto! Tardaste ${timeSpent} segundos.`;
-            setTimeout(fetchNewQuestion, 1500); // 1.5 seg para leer el tiempo
+            setTimeout(fetchNewQuestion, 1500);
         } else {
             document.getElementById('time-result').innerText = `Incorrecto. Tardaste ${timeSpent}s en fallar.`;
             setTimeout(fetchNewQuestion, 1500);
