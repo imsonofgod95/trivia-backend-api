@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QBIT TRIVIA - Pro Edition</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
 
 <style>
 :root{
@@ -41,6 +42,18 @@ width:100%;
 height:100%;
 background:var(--accent-green);
 transition:width .1s linear;
+}
+
+/* EFECTO DE PARPADEO PARA TIEMPO AGOTÁNDOSE */
+.timer-urgent {
+    background: var(--text-red) !important;
+    animation: blink 0.5s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
 }
 
 .container{
@@ -95,8 +108,16 @@ font-family:sans-serif;
 min-height:1.8rem;
 }
 
-.flash-success{box-shadow:0 0 30px var(--accent-green)}
-.flash-error{box-shadow:0 0 30px var(--text-red)}
+.flash-success{box-shadow:0 0 30px var(--accent-green); transform: scale(1.02); transition: 0.3s;}
+.flash-error{box-shadow:0 0 30px var(--text-red); animation: shake 0.4s;}
+
+@keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    50% { transform: translateX(10px); }
+    75% { transform: translateX(-10px); }
+    100% { transform: translateX(0); }
+}
 
 input{
 padding:12px;
@@ -118,12 +139,6 @@ border-radius:12px;
 font-weight:bold;
 cursor:pointer;
 margin-top:10px;
-}
-.rank{
-font-family:sans-serif;
-font-size:.85rem;
-margin-top:10px;
-text-align:left;
 }
 
 .chart-box {
@@ -177,7 +192,7 @@ canvas { max-width: 100%; }
 </div>
 
 <h3>🏆 Los Mejores de Hoy</h3>
-<div id="ranking" class="rank"></div>
+<div id="ranking" style="font-family: sans-serif; font-size: 0.85rem; text-align: left;"></div>
 
 <button class="start-btn" onclick="restart()">¡Quiero revancha!</button>
 </div>
@@ -185,6 +200,7 @@ canvas { max-width: 100%; }
 <audio id="snd-ok" src="https://assets.mixkit.co/sfx/preview/mixkit-audience-clapping-strongly-476.mp3"></audio>
 <audio id="snd-bad" src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"></audio>
 <audio id="snd-time" src="https://assets.mixkit.co/sfx/preview/mixkit-warning-alarm-buzzer-991.mp3"></audio>
+<audio id="snd-tick" src="https://assets.mixkit.co/sfx/preview/mixkit-clock-tick-tock-timer-1046.mp3" loop></audio>
 
 <script>
 let score=0,startTime,timer;
@@ -234,6 +250,9 @@ questionCount++;
 document.getElementById("counter").innerText=`Pregunta ${questionCount} de ${MAX_QUESTIONS}`;
 
 clearInterval(timer);
+document.getElementById("snd-tick").pause(); // Detener tic-tac previo
+document.getElementById("timer-bar").classList.remove("timer-urgent");
+
 const opt=document.getElementById("options-container");
 const bar=document.getElementById("timer-bar");
 const msg=document.getElementById("time-result");
@@ -264,7 +283,7 @@ try {
     startTime=Date.now();
     startTimer();
 } catch (e) {
-    document.getElementById("question").innerText="¡Ups! El servidor se tomó un descanso. Reintenta.";
+    document.getElementById("question").innerText="¡Ups! Error de conexión.";
 }
 }
 
@@ -272,9 +291,18 @@ function startTimer(){
 const bar=document.getElementById("timer-bar");
 timer=setInterval(()=>{
 const t=(Date.now()-startTime)/1000;
-bar.style.width=Math.max(0,(1-t/TIME_LIMIT)*100)+"%";
+const timeLeft = TIME_LIMIT - t;
+bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
+
+// EFECTO DE TENSIÓN: Menos de 5 segundos
+if(timeLeft <= 5 && timeLeft > 0) {
+    bar.classList.add("timer-urgent");
+    document.getElementById("snd-tick").play();
+}
+
 if(t>=TIME_LIMIT){
     clearInterval(timer);
+    document.getElementById("snd-tick").pause();
     streak=0;
     gameData.times.push(TIME_LIMIT);
     document.getElementById("time-result").innerText="⏰ ¡Se acabó el tiempo!";
@@ -286,6 +314,7 @@ if(t>=TIME_LIMIT){
 
 function check(sel,correct){
 clearInterval(timer);
+document.getElementById("snd-tick").pause();
 const cleanCorrect=deepClean(correct);
 const timeSpent=(Date.now()-startTime)/1000;
 gameData.times.push(timeSpent.toFixed(2));
@@ -297,14 +326,20 @@ const card=document.getElementById("game");
 if(sel===cleanCorrect){
     streak++;
     gameData.accuracy[gameData.currentCat].correct++;
-    let frases = ["¡Genio!", "¡Impresionante!", "¡A la primera!", "¡Qué nivel!", "¡Estás on fire!"];
-    let randomFrase = frases[Math.floor(Math.random()*frases.length)];
     
-    if(streak%3===0){pts+=10; msg.innerText=`🔥 ¡RACHA DE 3! +10 extras\n`;}
+    // EFECTO VISUAL: Confeti al acertar
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#00e676', '#ffffff'] });
+
+    if(streak%3===0){
+        pts+=10; 
+        msg.innerText=`🔥 ¡RACHA INCREÍBLE! +10 extras\n`;
+        // Confeti extra por racha
+        confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
+    }
     score+=pts;
     document.getElementById("score-value").innerText=score;
     document.getElementById("snd-ok").play();
-    msg.innerText+=`✅ ${randomFrase} +${pts} pts`;
+    msg.innerText+=`✅ ¡Genial! +${pts} pts`;
     card.classList.add("flash-success");
 } else {
     streak=0;
@@ -312,6 +347,8 @@ if(sel===cleanCorrect){
     msg.innerText=`❌ ¡Casi! La respuesta era: ${cleanCorrect}`;
     card.classList.add("flash-error");
 }
+
+document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
 
 setTimeout(()=>{
     card.classList.remove("flash-success","flash-error");
@@ -321,8 +358,18 @@ setTimeout(()=>{
 
 function endGame(){
 clearInterval(timer);
+document.getElementById("snd-tick").pause();
 document.getElementById("game").classList.add("hidden");
 document.getElementById("end").classList.remove("hidden");
+
+// EFECTO FINAL: Gran lluvia de confeti
+var end = Date.now() + (2 * 1000);
+(function frame() {
+  confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#00e676', '#ff4d6d'] });
+  confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#00e676', '#ff4d6d'] });
+  if (Date.now() < end) { requestAnimationFrame(frame); }
+}());
+
 const name=document.getElementById("player-label").innerText;
 document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
 document.getElementById("final-score").innerText=`Sumaste ${score} puntos`;
