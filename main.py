@@ -7,7 +7,6 @@ import json
 
 app = FastAPI()
 
-# Configuración de Seguridad para el Navegador
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +16,6 @@ app.add_middleware(
 
 DB_NAME = "trivia_game.db"
 
-# --- MODELOS DE DATOS ---
 class PreguntaIA(BaseModel):
     question_text: str
     options: List[str]
@@ -38,16 +36,16 @@ def get_db_connection():
 
 @app.get("/")
 def home():
-    return {"mensaje": "Qbit API Online", "version": "2.0"}
+    return {"mensaje": "Qbit API Online", "version": "3.0"}
 
-# --- RUTA PARA AUTOMATIZACIÓN (INYECCIÓN) ---
+# --- RUTA DE AUTOMATIZACIÓN CORREGIDA ---
 @app.post("/admin/inyectar-preguntas")
 def inyectar_preguntas(preguntas: List[PreguntaIA], secret_key: Optional[str] = Header(None, alias="secret-key")):
-    # La llave que configuramos para Colab
-    LLAVE_MAESTRA = "Qbit2026"
-    
-    if secret_key != LLAVE_MAESTRA:
-        raise HTTPException(status_code=403, detail=f"Acceso denegado: Llave incorrecta")
+    # LLAVE MAESTRA: Qbit2026
+    if secret_key != "Qbit2026":
+        # Si falla, imprimimos en consola de Render qué llegó para debuguear
+        print(f"DEBUG: Se recibió la llave '{secret_key}' pero no coincide.")
+        raise HTTPException(status_code=403, detail="Acceso Denegado: Llave Incorrecta")
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -60,23 +58,16 @@ def inyectar_preguntas(preguntas: List[PreguntaIA], secret_key: Optional[str] = 
             """, (p.question_text, json.dumps(p.options), p.correct_answer, p.category, p.difficulty, p.language_code, p.region_target))
             count += 1
         conn.commit()
-        return {"status": "success", "preguntas_agregadas": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "success", "agregadas": count}
     finally:
         conn.close()
 
-# --- RUTAS DE JUEGO ---
 @app.get("/pregunta-random")
 def obtener_pregunta(idioma: str = "es", region: str = "MX"):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            SELECT * FROM questions 
-            WHERE language_code = ? AND region_target = ? 
-            ORDER BY RANDOM() LIMIT 1
-        """, (idioma, region))
+        cursor.execute("SELECT * FROM questions WHERE language_code = ? AND region_target = ? ORDER BY RANDOM() LIMIT 1", (idioma, region))
         row = cursor.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="No hay preguntas")
@@ -97,7 +88,6 @@ def validar(datos: RespuestaUsuario):
     try:
         cursor.execute("SELECT correct_answer FROM questions WHERE id = ?", (datos.pregunta_id,))
         row = cursor.fetchone()
-        if not row: raise HTTPException(status_code=404)
         correcta = row["correct_answer"]
         return {"resultado": datos.respuesta_elegida == correcta, "correcta_era": correcta if datos.respuesta_elegida != correcta else None}
     finally:
