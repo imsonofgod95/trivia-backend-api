@@ -26,7 +26,6 @@
             overflow: hidden;
         }
 
-        /* BARRA DE TIEMPO */
         .timer-container {
             width: 100%;
             height: 8px;
@@ -90,26 +89,32 @@
             margin-bottom: 25px;
         }
 
-        /* ESTILO DE LOS BOTONES DE OPCIÓN */
+        /* ESTILO DE LOS BOTONES DE RESPUESTA */
         .option-btn {
             background-color: var(--btn-blue);
             color: white;
             border: 2px solid transparent;
-            padding: 16px;
+            padding: 14px;
             width: 100%;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             border-radius: 12px;
             font-size: 1rem;
             cursor: pointer;
             transition: all 0.2s;
             font-family: 'Arial', sans-serif;
             font-weight: bold;
+            display: block; 
         }
 
-        .option-btn:hover { 
+        .option-btn:hover:not(:disabled) { 
             background-color: #3d4670; 
             border-color: var(--accent-green);
             transform: scale(1.02);
+        }
+
+        .option-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .score-bar {
@@ -166,7 +171,7 @@
 
     <div class="score-bar">
         <span>SCORE: <span id="score-value">0</span></span>
-        <span>v9.1</span>
+        <span>v9.4</span>
     </div>
 
     <div id="time-result" class="time-msg">Responde antes de que se agote el tiempo</div>
@@ -175,9 +180,9 @@
 
 <script>
     let score = 0;
-    let startTime;
+    let startTime; 
     let timerInterval;
-    const TIME_LIMIT = 15;
+    const TIME_LIMIT = 15; 
     const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
 
     function updateLanguage() {
@@ -196,56 +201,73 @@
         const bar = document.getElementById('timer-bar');
         const msg = document.getElementById('time-result');
         
+        // LIMPIEZA TOTAL DEL CONTENEDOR
         optContainer.innerHTML = "";
-        qText.innerText = "Buscando...";
+        qText.innerText = "Buscando desafío...";
         mText.innerText = "---";
         bar.style.width = "100%";
-        msg.innerText = "Preparando cronómetro...";
+        msg.innerText = "¡Prepárate!";
 
         try {
             const response = await fetch(`${API_URL}?lang=${lang}&t=${new Date().getTime()}`);
             const data = await response.json();
 
             qText.innerText = data.pregunta;
-            
-            const categoria = data.categoria || "CULTURA GENERAL";
+            const categoria = data.categoria || "GENERAL";
             const dificultad = data.dificultad || "MEDIUM";
             mText.innerText = `${categoria} • ${dificultad}`;
             
-            // GENERACIÓN DE BOTONES REALES
-            data.opciones.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'option-btn';
-                btn.innerText = opt;
-                // Al hacer clic, disparamos la verificación
-                btn.onclick = () => check(opt, data.correcta);
-                optContainer.appendChild(btn);
-            });
+            // CONSTRUCCIÓN DE BOTONES UNO POR UNO
+            if (data.opciones && Array.isArray(data.opciones)) {
+                data.opciones.forEach(opcionTexto => {
+                    const btn = document.createElement('button');
+                    btn.className = 'option-btn';
+                    btn.innerText = opcionTexto;
+                    
+                    // Asignación de evento de clic individual
+                    btn.onclick = () => check(opcionTexto, data.correcta);
+                    
+                    optContainer.appendChild(btn);
+                });
+            }
 
             startTimer();
-            msg.innerText = "¡Corre el tiempo!";
         } catch (e) {
-            qText.innerText = "Error: Servidor desconectado";
-            console.error(e);
+            qText.innerText = "Error: Servidor fuera de línea";
+            console.error("Fallo de red:", e);
         }
     }
 
     function startTimer() {
-        startTime = Date.now();
-        let timeLeft = TIME_LIMIT;
+        startTime = Date.now(); 
         const bar = document.getElementById('timer-bar');
+        const msg = document.getElementById('time-result');
+        msg.innerText = "¡Tiempo corriendo!";
 
         timerInterval = setInterval(() => {
-            timeLeft -= 0.1;
+            const currentTime = Date.now();
+            const elapsedSeconds = (currentTime - startTime) / 1000;
+            const timeLeft = TIME_LIMIT - elapsedSeconds;
+            
             const percentage = (timeLeft / TIME_LIMIT) * 100;
-            bar.style.width = `${percentage}%`;
+            bar.style.width = `${Math.max(0, percentage)}%`;
 
             if (timeLeft <= 0) {
                 clearInterval(timerInterval);
-                document.getElementById('time-result').innerText = "¡Tiempo agotado!";
-                setTimeout(fetchNewQuestion, 2000);
+                bar.style.width = "0%";
+                msg.innerText = "❌ ¡TIEMPO AGOTADO!";
+                msg.style.color = "var(--text-red)";
+                
+                // Bloquear botones al agotar tiempo
+                const buttons = document.querySelectorAll('.option-btn');
+                buttons.forEach(b => b.disabled = true);
+                
+                setTimeout(() => {
+                    msg.style.color = "var(--text-dim)";
+                    fetchNewQuestion();
+                }, 2000);
             }
-        }, 100);
+        }, 50);
     }
 
     function check(selected, correct) {
@@ -254,29 +276,27 @@
         const timeSpent = ((endTime - startTime) / 1000).toFixed(2);
         const msg = document.getElementById('time-result');
 
-        // Deshabilitamos botones para evitar múltiples clics
         const buttons = document.querySelectorAll('.option-btn');
         buttons.forEach(b => b.disabled = true);
 
         if (selected === correct) {
             score += 10;
             document.getElementById('score-value').innerText = score;
-            msg.innerText = `✅ ¡Correcto! Tardaste ${timeSpent}s.`;
+            msg.innerText = `✅ ¡Correcto! (${timeSpent}s)`;
             msg.style.color = "var(--accent-green)";
         } else {
             msg.innerText = `❌ Error. Era: ${correct}`;
             msg.style.color = "var(--text-red)";
         }
         
-        // Pausa breve para ver el resultado y cargar la siguiente
         setTimeout(() => {
             msg.style.color = "var(--text-dim)";
             fetchNewQuestion();
-        }, 2000);
+        }, 1800);
     }
 
-    // Iniciar juego automáticamente
-    fetchNewQuestion();
+    // Retraso inicial para estabilizar la carga
+    setTimeout(fetchNewQuestion, 300);
 </script>
 
 </body>
