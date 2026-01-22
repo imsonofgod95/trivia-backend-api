@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QBIT TRIVIA - Premium</title>
+    <title>QBIT TRIVIA - Pro Edition</title>
     <style>
         :root {
             --bg-dark: #1a1f32;
@@ -22,6 +22,23 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
+            overflow: hidden;
+        }
+
+        /* BARRA DE TIEMPO */
+        .timer-container {
+            width: 100%;
+            height: 8px;
+            background-color: #1e2640;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #timer-bar {
+            width: 100%;
+            height: 100%;
+            background-color: var(--accent-green);
+            transition: width 0.1s linear;
         }
 
         .container {
@@ -32,41 +49,43 @@
             border-radius: 20px;
             text-align: center;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
         }
 
-        h1 { letter-spacing: 3px; font-size: 2rem; margin-bottom: 10px; }
+        h1 { letter-spacing: 3px; font-size: 2.2rem; margin-top: 0; }
 
-        .country-badge {
+        .language-selector {
             background-color: #1e2640;
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 8px;
             margin-bottom: 20px;
-            display: inline-block;
             border: 1px solid #3d4670;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
 
-        .category-text {
-            color: #8a94b8;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            margin-bottom: 20px;
-        }
+        select { background: transparent; color: white; border: none; font-size: 1rem; cursor: pointer; }
 
         #question {
             color: var(--text-red);
-            font-size: 1.4rem;
-            margin-bottom: 25px;
-            min-height: 60px;
+            font-size: 1.5rem;
+            margin: 20px 0;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .option-btn {
             background-color: var(--btn-blue);
             color: white;
             border: none;
-            padding: 15px;
+            padding: 16px;
             width: 100%;
             margin-bottom: 12px;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 1.1rem;
             cursor: pointer;
             transition: 0.2s;
@@ -75,66 +94,84 @@
         .option-btn:hover { background-color: #3d4670; }
 
         .score-bar {
-            margin-top: 25px;
+            margin-top: 20px;
             padding-top: 15px;
             border-top: 2px solid #3d4670;
             display: flex;
             justify-content: space-between;
             color: var(--accent-green);
+            font-family: sans-serif;
+            font-weight: bold;
         }
 
-        .skip-text {
-            color: #8a94b8;
+        .time-msg {
             font-size: 0.8rem;
-            text-decoration: underline;
-            cursor: pointer;
-            display: block;
+            color: #8a94b8;
             margin-top: 10px;
+            font-family: sans-serif;
         }
     </style>
 </head>
 <body>
 
+<div class="timer-container">
+    <div id="timer-bar"></div>
+</div>
+
 <div class="container">
     <h1>QBIT TRIVIA</h1>
     
-    <div class="country-badge">
-        🇲🇽 México (Español)
+    <div class="language-selector">
+        <span id="flag-icon">🇲🇽</span>
+        <select id="lang-select" onchange="updateLanguage()">
+            <option value="es">México (Español)</option>
+            <option value="en">USA (English)</option>
+        </select>
     </div>
 
-    <div class="category-text">CULTURA GENERAL • EASY</div>
-
-    <div id="question">Cargando...</div>
+    <div id="question">Cargando desafío...</div>
 
     <div id="options-container"></div>
 
     <div class="score-bar">
         <span>SCORE: <span id="score-value">0</span></span>
-        <span style="color: #555;">v8.7</span>
+        <span>v9.0</span>
     </div>
 
-    <span class="skip-text" onclick="fetchNewQuestion()">Saltar pregunta</span>
+    <div id="time-result" class="time-msg">Responde rápido para ganar más puntos</div>
 </div>
 
 <script>
     let score = 0;
+    let startTime;
+    let timerInterval;
+    const TIME_LIMIT = 15; // 15 segundos por pregunta
     const API_URL = "https://qbit-e6gb.onrender.com/pregunta-random";
 
+    function updateLanguage() {
+        const select = document.getElementById('lang-select');
+        const flag = document.getElementById('flag-icon');
+        flag.innerText = select.value === 'es' ? '🇲🇽' : '🇺🇸';
+        fetchNewQuestion();
+    }
+
     async function fetchNewQuestion() {
+        clearInterval(timerInterval); // Reset del tiempo
         const qText = document.getElementById('question');
         const optContainer = document.getElementById('options-container');
+        const lang = document.getElementById('lang-select').value;
+        const bar = document.getElementById('timer-bar');
         
-        // Limpiamos antes de cargar
         optContainer.innerHTML = "";
         qText.innerText = "Buscando...";
+        bar.style.width = "100%";
 
         try {
-            // Añadimos un pequeño truco para evitar que el navegador guarde la pregunta anterior (cache)
-            const response = await fetch(`${API_URL}?t=${new Date().getTime()}`);
+            const response = await fetch(`${API_URL}?lang=${lang}&t=${Math.random()}`);
             const data = await response.json();
 
             qText.innerText = data.pregunta;
-
+            
             data.opciones.forEach(opt => {
                 const btn = document.createElement('button');
                 btn.className = 'option-btn';
@@ -142,24 +179,47 @@
                 btn.onclick = () => check(opt, data.correcta);
                 optContainer.appendChild(btn);
             });
+
+            startTimer(); // Iniciamos cronómetro y barra
         } catch (e) {
-            qText.innerText = "Error de conexión";
+            qText.innerText = "Error: ¿Render está encendido?";
         }
+    }
+
+    function startTimer() {
+        startTime = Date.now();
+        let timeLeft = TIME_LIMIT;
+        const bar = document.getElementById('timer-bar');
+
+        timerInterval = setInterval(() => {
+            timeLeft -= 0.1;
+            const percentage = (timeLeft / TIME_LIMIT) * 100;
+            bar.style.width = `${percentage}%`;
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                alert("¡Se acabó el tiempo! ⏰");
+                fetchNewQuestion();
+            }
+        }, 100);
     }
 
     function check(selected, correct) {
+        clearInterval(timerInterval);
+        const endTime = Date.now();
+        const timeSpent = ((endTime - startTime) / 1000).toFixed(2); // CALCULO DE TIEMPO
+
         if (selected === correct) {
             score += 10;
             document.getElementById('score-value').innerText = score;
-            // CAMBIO CLAVE: Al acertar, llama automáticamente a la siguiente
-            fetchNewQuestion();
+            document.getElementById('time-result').innerText = `¡Correcto! Tardaste ${timeSpent} segundos.`;
+            setTimeout(fetchNewQuestion, 1500); // 1.5 seg para leer el tiempo
         } else {
-            alert("¡Incorrecto!");
-            fetchNewQuestion(); // También cambia si fallas para que no te atores
+            document.getElementById('time-result').innerText = `Incorrecto. Tardaste ${timeSpent}s en fallar.`;
+            setTimeout(fetchNewQuestion, 1500);
         }
     }
 
-    // Iniciar
     fetchNewQuestion();
 </script>
 
