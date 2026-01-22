@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 import sqlite3
 import json
 
@@ -16,6 +16,7 @@ app.add_middleware(
 
 DB_NAME = "trivia_game.db"
 
+# --- MODELOS ---
 class PreguntaIA(BaseModel):
     question_text: str
     options: List[str]
@@ -25,9 +26,10 @@ class PreguntaIA(BaseModel):
     language_code: str
     region_target: str
 
-class RespuestaUsuario(BaseModel):
-    pregunta_id: int
-    respuesta_elegida: str
+# Nuevo modelo que envuelve las preguntas y la llave
+class LotePreguntas(BaseModel):
+    secret_key: str
+    preguntas: List[PreguntaIA]
 
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
@@ -36,22 +38,19 @@ def get_db_connection():
 
 @app.get("/")
 def home():
-    return {"mensaje": "Qbit API Online", "version": "3.0"}
+    return {"mensaje": "Qbit API Online", "version": "4.0 (Bypass Mode)"}
 
-# --- RUTA DE AUTOMATIZACIÓN CORREGIDA ---
 @app.post("/admin/inyectar-preguntas")
-def inyectar_preguntas(preguntas: List[PreguntaIA], secret_key: Optional[str] = Header(None, alias="secret-key")):
-    # LLAVE MAESTRA: Qbit2026
-    if secret_key != "Qbit2026":
-        # Si falla, imprimimos en consola de Render qué llegó para debuguear
-        print(f"DEBUG: Se recibió la llave '{secret_key}' pero no coincide.")
-        raise HTTPException(status_code=403, detail="Acceso Denegado: Llave Incorrecta")
+def inyectar_preguntas(lote: LotePreguntas):
+    # Validamos la llave que viene DENTRO del JSON
+    if lote.secret_key != "Qbit2026":
+        raise HTTPException(status_code=403, detail="Llave incorrecta en JSON")
     
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
         count = 0
-        for p in preguntas:
+        for p in lote.preguntas:
             cursor.execute("""
                 INSERT INTO questions (question_text, options, correct_answer, category, difficulty, language_code, region_target)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -62,6 +61,7 @@ def inyectar_preguntas(preguntas: List[PreguntaIA], secret_key: Optional[str] = 
     finally:
         conn.close()
 
+# Las rutas de juego (obtener y validar) se quedan igual que en la v3.0
 @app.get("/pregunta-random")
 def obtener_pregunta(idioma: str = "es", region: str = "MX"):
     conn = get_db_connection()
@@ -69,26 +69,19 @@ def obtener_pregunta(idioma: str = "es", region: str = "MX"):
     try:
         cursor.execute("SELECT * FROM questions WHERE language_code = ? AND region_target = ? ORDER BY RANDOM() LIMIT 1", (idioma, region))
         row = cursor.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="No hay preguntas")
-        return {
-            "id": row["id"],
-            "pregunta": row["question_text"],
-            "opciones": json.loads(row["options"]),
-            "categoria": row["category"],
-            "dificultad": row["difficulty"]
-        }
+        if not row: raise HTTPException(status_code=404)
+        return {"id": row["id"], "pregunta": row["question_text"], "opciones": json.loads(row["options"]), "categoria": row["category"], "dificultad": row["difficulty"]}
     finally:
         conn.close()
 
 @app.post("/validar-respuesta")
-def validar(datos: RespuestaUsuario):
+def validar(datos: dict):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT correct_answer FROM questions WHERE id = ?", (datos.pregunta_id,))
+        cursor.execute("SELECT correct_answer FROM questions WHERE id = ?", (datos['pregunta_id'],))
         row = cursor.fetchone()
         correcta = row["correct_answer"]
-        return {"resultado": datos.respuesta_elegida == correcta, "correcta_era": correcta if datos.respuesta_elegida != correcta else None}
+        return {"resultado": datos['respuesta_elegida'] == correcta, "correcta_era": correcta if datos['respuesta_elegida'] != correcta else None}
     finally:
         conn.close()
