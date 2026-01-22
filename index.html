@@ -29,6 +29,21 @@ margin:0;
 overflow-y: auto;
 }
 
+/* ANIMACIÓN DE FLOTADO PARA EL LOGO */
+@keyframes float {
+    0% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-15px) rotate(2deg); }
+    100% { transform: translateY(0px) rotate(0deg); }
+}
+
+.logo-app {
+    width: 180px; /* Tamaño optimizado para que luzca el logo */
+    height: auto;
+    margin-bottom: 20px;
+    filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5));
+    animation: float 3s ease-in-out infinite; /* Activamos el movimiento */
+}
+
 .timer-container{
 width:100%;
 height:8px;
@@ -44,7 +59,6 @@ background:var(--accent-green);
 transition:width .1s linear;
 }
 
-/* EFECTO DE PARPADEO PARA TIEMPO AGOTÁNDOSE */
 .timer-urgent {
     background: var(--text-red) !important;
     animation: blink 0.5s infinite;
@@ -66,6 +80,7 @@ text-align:center;
 box-shadow:0 15px 40px rgba(0,0,0,.6);
 position:relative;
 margin: 20px 0;
+transition: 0.3s;
 }
 
 .hidden{display:none}
@@ -108,14 +123,17 @@ font-family:sans-serif;
 min-height:1.8rem;
 }
 
-.flash-success{box-shadow:0 0 30px var(--accent-green); transform: scale(1.02); transition: 0.3s;}
-.flash-error{box-shadow:0 0 30px var(--text-red); animation: shake 0.4s;}
+.flash-success{box-shadow:0 0 40px var(--accent-green) !important;}
+.flash-error{
+    animation: shake 0.4s !important;
+    box-shadow:0 0 40px var(--text-red) !important;
+}
 
 @keyframes shake {
     0% { transform: translateX(0); }
-    25% { transform: translateX(-10px); }
-    50% { transform: translateX(10px); }
-    75% { transform: translateX(-10px); }
+    25% { transform: translateX(-12px); }
+    50% { transform: translateX(12px); }
+    75% { transform: translateX(-12px); }
     100% { transform: translateX(0); }
 }
 
@@ -156,15 +174,16 @@ canvas { max-width: 100%; }
 <div class="timer-container"><div id="timer-bar"></div></div>
 
 <div class="container" id="menu">
-<h1>QBIT TRIVIA</h1>
-<p style="color:var(--text-dim)">¡Prepárate para el desafío más divertido!</p>
-<input id="playerName" placeholder="Escribe tu apodo aquí">
-<button class="start-btn" onclick="startGame()">¡A Jugar!</button>
+    <img src="logo.png" alt="Logo QBIT" class="logo-app">
+    <h1>QBIT TRIVIA</h1>
+    <p style="color:var(--text-dim)">¡Prepárate para el desafío más divertido!</p>
+    <input id="playerName" placeholder="Escribe tu apodo aquí">
+    <button class="start-btn" onclick="startGame()">¡A Jugar!</button>
 </div>
 
 <div class="container hidden" id="game">
 <h1>QBIT TRIVIA</h1>
-<div id="question">Cargando...</div>
+<div id="question">Cargando desafío...</div>
 <div id="meta-container" class="time-msg"></div>
 <div id="options-container"></div>
 
@@ -197,10 +216,10 @@ canvas { max-width: 100%; }
 <button class="start-btn" onclick="restart()">¡Quiero revancha!</button>
 </div>
 
-<audio id="snd-ok" src="https://assets.mixkit.co/sfx/preview/mixkit-audience-clapping-strongly-476.mp3"></audio>
-<audio id="snd-bad" src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3"></audio>
-<audio id="snd-time" src="https://assets.mixkit.co/sfx/preview/mixkit-warning-alarm-buzzer-991.mp3"></audio>
-<audio id="snd-tick" src="https://assets.mixkit.co/sfx/preview/mixkit-clock-tick-tock-timer-1046.mp3" loop></audio>
+<audio id="snd-ok" preload="auto" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
+<audio id="snd-bad" preload="auto" src="https://www.soundjay.com/buttons/sounds/button-10.mp3"></audio>
+<audio id="snd-time" preload="auto" src="https://www.soundjay.com/misc/sounds/fail-trombone-01.mp3"></audio>
+<audio id="snd-tick" preload="auto" src="https://www.soundjay.com/clock/sounds/clock-ticking-2.mp3" loop></audio>
 
 <script>
 let score=0,startTime,timer;
@@ -216,7 +235,22 @@ let gameData = {
     accuracy: {}
 };
 
+function unlockAudio() {
+    const audios = [
+        document.getElementById("snd-ok"),
+        document.getElementById("snd-bad"),
+        document.getElementById("snd-time"),
+        document.getElementById("snd-tick")
+    ];
+    audios.forEach(a => {
+        a.play().catch(()=>{});
+        a.pause();
+        a.currentTime = 0;
+    });
+}
+
 function startGame(){
+unlockAudio();
 score=0; streak=0; questionCount=0;
 gameData = { labels: [], times: [], accuracy: {} };
 document.getElementById("score-value").innerText=0;
@@ -244,21 +278,21 @@ try{return JSON.parse(o.replace(/'/g,'"')).map(deepClean)}catch{return[]}
 return[];
 }
 
-async function fetchNewQuestion(){
+async function fetchNewQuestion() {
 if(questionCount>=MAX_QUESTIONS) return endGame();
 questionCount++;
 document.getElementById("counter").innerText=`Pregunta ${questionCount} de ${MAX_QUESTIONS}`;
 
 clearInterval(timer);
-document.getElementById("snd-tick").pause(); // Detener tic-tac previo
+document.getElementById("snd-tick").pause();
 document.getElementById("timer-bar").classList.remove("timer-urgent");
 
 const opt=document.getElementById("options-container");
 const bar=document.getElementById("timer-bar");
 const msg=document.getElementById("time-result");
-opt.innerHTML="";
-msg.innerText="¡Concéntrate!";
-bar.style.width="100%";
+opt.innerHTML = "";
+msg.innerText = "¡Concéntrate!";
+bar.style.width = "100%";
 
 try {
     const r=await fetch(API_URL+"?t="+Date.now());
@@ -283,7 +317,7 @@ try {
     startTime=Date.now();
     startTimer();
 } catch (e) {
-    document.getElementById("question").innerText="¡Ups! Error de conexión.";
+    document.getElementById("question").innerText="¡Error de conexión!";
 }
 }
 
@@ -294,7 +328,6 @@ const t=(Date.now()-startTime)/1000;
 const timeLeft = TIME_LIMIT - t;
 bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
 
-// EFECTO DE TENSIÓN: Menos de 5 segundos
 if(timeLeft <= 5 && timeLeft > 0) {
     bar.classList.add("timer-urgent");
     document.getElementById("snd-tick").play();
@@ -305,7 +338,7 @@ if(t>=TIME_LIMIT){
     document.getElementById("snd-tick").pause();
     streak=0;
     gameData.times.push(TIME_LIMIT);
-    document.getElementById("time-result").innerText="⏰ ¡Se acabó el tiempo!";
+    document.getElementById("time-result").innerText="⏰ ¡TIEMPO!";
     document.getElementById("snd-time").play();
     setTimeout(fetchNewQuestion,1500);
 }
@@ -326,25 +359,18 @@ const card=document.getElementById("game");
 if(sel===cleanCorrect){
     streak++;
     gameData.accuracy[gameData.currentCat].correct++;
-    
-    // EFECTO VISUAL: Confeti al acertar
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#00e676', '#ffffff'] });
+    confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
 
-    if(streak%3===0){
-        pts+=10; 
-        msg.innerText=`🔥 ¡RACHA INCREÍBLE! +10 extras\n`;
-        // Confeti extra por racha
-        confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
-    }
+    if(streak%3===0) pts+=10; 
     score+=pts;
     document.getElementById("score-value").innerText=score;
     document.getElementById("snd-ok").play();
-    msg.innerText+=`✅ ¡Genial! +${pts} pts`;
+    msg.innerText=`✅ Correcto +${pts} pts`;
     card.classList.add("flash-success");
 } else {
     streak=0;
     document.getElementById("snd-bad").play();
-    msg.innerText=`❌ ¡Casi! La respuesta era: ${cleanCorrect}`;
+    msg.innerText=`❌ Era: ${cleanCorrect}`;
     card.classList.add("flash-error");
 }
 
@@ -353,7 +379,7 @@ document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
 setTimeout(()=>{
     card.classList.remove("flash-success","flash-error");
     fetchNewQuestion();
-},2200);
+},2000);
 }
 
 function endGame(){
@@ -362,13 +388,7 @@ document.getElementById("snd-tick").pause();
 document.getElementById("game").classList.add("hidden");
 document.getElementById("end").classList.remove("hidden");
 
-// EFECTO FINAL: Gran lluvia de confeti
-var end = Date.now() + (2 * 1000);
-(function frame() {
-  confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#00e676', '#ff4d6d'] });
-  confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#00e676', '#ff4d6d'] });
-  if (Date.now() < end) { requestAnimationFrame(frame); }
-}());
+confetti({ particleCount: 150, spread: 180, origin: { y: 0.6 } });
 
 const name=document.getElementById("player-label").innerText;
 document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
@@ -413,7 +433,7 @@ function renderCharts() {
     new Chart(ctxBar, {
         type: 'bar',
         data: {
-            labels: gameData.times.map((_, i) => `Pregunta ${i+1}`),
+            labels: gameData.times.map((_, i) => `Q${i+1}`),
             datasets: [{
                 label: 'Segundos',
                 data: gameData.times,
