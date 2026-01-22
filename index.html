@@ -37,11 +37,12 @@ overflow-y: auto;
 }
 
 .logo-app {
-    width: 180px; /* Tamaño optimizado para que luzca el logo */
+    width: 640px; /* EL DOBLE DE GRANDE QUE ANTES */
+    max-width: 100%; /* Asegura que se vea bien en móviles */
     height: auto;
-    margin-bottom: 20px;
-    filter: drop-shadow(0 10px 15px rgba(0, 0, 0, 0.5));
-    animation: float 3s ease-in-out infinite; /* Activamos el movimiento */
+    margin-bottom: 10px;
+    filter: drop-shadow(0 15px 25px rgba(0, 0, 0, 0.6));
+    animation: float 3s ease-in-out infinite;
 }
 
 .timer-container{
@@ -73,7 +74,7 @@ transition:width .1s linear;
 .container{
 background:var(--card-bg);
 width:95%;
-max-width:500px;
+max-width:700px; /* Aumentado para dar espacio al logo gigante */
 padding:30px;
 border-radius:20px;
 text-align:center;
@@ -175,24 +176,22 @@ canvas { max-width: 100%; }
 
 <div class="container" id="menu">
     <img src="logo.png" alt="Logo QBIT" class="logo-app">
-    <h1>QBIT TRIVIA</h1>
     <p style="color:var(--text-dim)">¡Prepárate para el desafío más divertido!</p>
     <input id="playerName" placeholder="Escribe tu apodo aquí">
     <button class="start-btn" onclick="startGame()">¡A Jugar!</button>
 </div>
 
 <div class="container hidden" id="game">
-<h1>QBIT TRIVIA</h1>
-<div id="question">Cargando desafío...</div>
-<div id="meta-container" class="time-msg"></div>
-<div id="options-container"></div>
+    <div id="question">Cargando desafío...</div>
+    <div id="meta-container" class="time-msg"></div>
+    <div id="options-container"></div>
 
-<div class="score-bar">
-<span><span id="player-label"></span> • PUNTOS: <span id="score-value">0</span></span>
-<span id="counter">1 / 10</span>
-</div>
+    <div class="score-bar">
+        <span><span id="player-label"></span> • PUNTOS: <span id="score-value">0</span></span>
+        <span id="counter">1 / 10</span>
+    </div>
 
-<div id="time-result" class="time-msg"></div>
+    <div id="time-result" class="time-msg"></div>
 </div>
 
 <div class="container hidden" id="end">
