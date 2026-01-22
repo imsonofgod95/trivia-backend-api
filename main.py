@@ -7,10 +7,10 @@ import random
 app = FastAPI()
 
 # --- CONFIGURACIÓN DE SEGURIDAD (CORS) ---
-# Esto evita el error "Error de conexión con la base de datos"
+# Permite que tu juego en GitHub Pages o local se conecte sin bloqueos
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite conexiones desde cualquier origen (Local o GitHub Pages)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,9 +31,10 @@ class PaqueteInyeccion(BaseModel):
     preguntas: List[Pregunta]
 
 # --- BASE DE DATOS EN MEMORIA ---
-# Aquí se guardan las preguntas que inyectas desde Colab
+# Iniciamos con la pregunta de Canadá por defecto
 db_preguntas = [
     {
+        "id": 1,
         "pregunta": "¿Cuál es la capital de Canadá?",
         "opciones": ["Toronto", "Vancouver", "Montreal", "Ottawa"],
         "correcta": "Ottawa",
@@ -42,25 +43,48 @@ db_preguntas = [
     }
 ]
 
+# Historial para evitar repeticiones en la misma sesión
+preguntas_vistas = []
+
 # --- RUTAS ---
 
 @app.get("/")
 def home():
-    return {"status": "online", "mensaje": "Qbit Trivia API v8.7"}
+    return {"status": "online", "server_time": "2026-01-22", "total_questions": len(db_preguntas)}
 
 @app.get("/pregunta-random")
-def obtener_pregunta():
-    if not db_preguntas:
-        raise HTTPException(status_code=404, detail="No hay preguntas en la base de datos")
-    return random.choice(db_preguntas)
+def obtener_pregunta(lang: str = "es"):
+    # Filtrar por idioma seleccionado en el juego
+    opciones = [p for p in db_preguntas if p.get("idioma") == lang]
+    
+    if not opciones:
+        opciones = db_preguntas # Si no hay del idioma, usar cualquiera
+
+    # Buscar preguntas que el usuario aún no haya visto
+    disponibles = [p for p in opciones if p.get("id") not in preguntas_vistas]
+    
+    # Si ya se mostraron todas, reiniciamos el historial
+    if not disponibles:
+        preguntas_vistas.clear()
+        disponibles = opciones
+
+    seleccionada = random.choice(disponibles)
+    
+    # Registrar que ya se vio esta pregunta
+    if "id" in seleccionada:
+        preguntas_vistas.append(seleccionada["id"])
+        
+    return seleccionada
 
 @app.post("/inyectar-preguntas")
 async def inyectar(paquete: PaqueteInyeccion):
+    # Verificación de seguridad con tu llave
     if paquete.secret_key != "Qbit2026":
         raise HTTPException(status_code=403, detail="Llave secreta incorrecta")
     
     for p in paquete.preguntas:
         nueva = {
+            "id": len(db_preguntas) + 1,
             "pregunta": p.question_text,
             "opciones": p.options,
             "correcta": p.correct_answer,
@@ -70,9 +94,8 @@ async def inyectar(paquete: PaqueteInyeccion):
         }
         db_preguntas.append(nueva)
     
-    return {"status": "success", "total_db": len(db_preguntas)}
+    return {"status": "success", "agregadas": len(paquete.preguntas), "total_actual": len(db_preguntas)}
 
 @app.post("/validar-respuesta")
 def validar(datos: dict):
-    # Lógica simple de validación para el frontend
-    return {"resultado": True}
+    return {"status": "received"}
