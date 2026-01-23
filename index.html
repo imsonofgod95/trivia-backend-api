@@ -102,6 +102,19 @@ transition: 0.3s;
 
 .hidden{display:none}
 
+/* MARCADOR DE DUELO EN VIVO */
+.duel-status {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: rgba(0,0,0,0.4);
+    padding: 15px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.vs-badge { background: var(--text-red); padding: 4px 12px; border-radius: 8px; font-size: 0.9rem; font-weight: bold; }
+
 #question {
     font-size: 1.8rem; 
     line-height: 1.2;
@@ -228,7 +241,7 @@ canvas { max-width: 100%; }
 
 <div class="container" id="menu">
     <img src="logo.png" onerror="this.src='https://i.ibb.co/LdpXW4P/logo-qbit.png'" alt="Logo QBIT" class="logo-app">
-    <p style="color:var(--text-dim)">¡Personaliza tu partida!</p>
+    <p style="color:var(--text-dim)">¡Duelo de Inteligencia en Tiempo Real!</p>
     
     <input id="playerName" placeholder="Escribe tu apodo aquí">
     
@@ -250,38 +263,40 @@ canvas { max-width: 100%; }
 </div>
 
 <div class="container hidden" id="game">
-    <h2 id="duelo-header" style="color:var(--accent-green); margin-bottom: 10px;">¡DUELO ENCONTRADO!</h2>
+    <div class="duel-status">
+        <div>
+            <div style="font-size:0.7rem; color:var(--text-dim); margin-bottom: 5px;">TÚ</div>
+            <div id="my-duel-score" style="color:var(--accent-green); font-size: 1.5rem;">0</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div>
+            <div id="opp-name-label" style="font-size:0.7rem; color:var(--text-dim); margin-bottom: 5px;">RIVAL</div>
+            <div id="opp-duel-score" style="color:var(--text-red); font-size: 1.5rem;">0</div>
+        </div>
+    </div>
+
     <div id="meta-container">Cargando datos...</div> 
     <div id="question">Cargando desafío...</div>
     <div id="options-container"></div>
 
     <div class="score-bar">
-        <span><span id="player-label"></span> • PUNTOS: <span id="score-value">0</span></span>
-        <span id="counter">1 / 10</span>
+        <span>PREGUNTA <span id="counter-val">1</span> / 10</span>
     </div>
 
     <div id="time-result" class="time-msg"></div>
 </div>
 
 <div class="container hidden" id="end">
-<h1>🏁 ¡Partida Terminada!</h1>
+<h1 id="win-loss-title">🏁 ¡Partida Terminada!</h1>
 <p id="final-player"></p>
-<p id="final-score" style="font-size: 1.5rem; color: var(--accent-green)"></p>
+<p id="final-duel-score" style="font-size: 1.5rem; color: var(--accent-green)"></p>
 
 <div class="chart-box">
-    <p style="font-size: 0.8rem; color: var(--text-dim)">¿EN QUÉ ERES CRACK?</p>
+    <p style="font-size: 0.8rem; color: var(--text-dim)">TU RENDIMIENTO</p>
     <canvas id="radarChart"></canvas>
 </div>
 
-<div class="chart-box">
-    <p style="font-size: 0.8rem; color: var(--text-dim)">TUS REFLEJOS (SEGUNDOS)</p>
-    <canvas id="barChart"></canvas>
-</div>
-
-<h3>🏆 Los Mejores de Hoy</h3>
-<div id="ranking" style="font-family: sans-serif; font-size: 0.85rem; text-align: left;"></div>
-
-<button class="start-btn" onclick="restart()">¡Quiero revancha!</button>
+<button class="start-btn" onclick="location.reload()">Volver al Menú</button>
 </div>
 
 <audio id="snd-ok" preload="auto" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
@@ -294,7 +309,7 @@ canvas { max-width: 100%; }
 const API_BASE = "https://qbit-e6gb.onrender.com";
 const socket = io(API_BASE);
 
-let score=0,startTime,timer;
+let score=0, oppScore=0, startTime, timer, currentRoom = null;
 let questionCount=0;
 let streak=0;
 let chosenDifficulty = "Random";
@@ -303,54 +318,47 @@ const TIME_LIMIT=15;
 
 let gameData = { labels: [], times: [], accuracy: {} };
 
-// LÓGICA DE TIEMPO REAL
+// --- LÓGICA MULTIJUGADOR ---
 function iniciarBusqueda() {
     const name = document.getElementById("playerName").value || "Jugador Estrella";
     const rank = localStorage.getItem("qbit-rank") || 1000;
-    
     unlockAudio();
-    
     document.getElementById("menu").classList.add("hidden");
     document.getElementById("matchmaking").classList.remove("hidden");
-    
-    // Entrar a la cola del servidor
-    socket.emit("join_queue", { name: name, rank: rank });
+    socket.emit("join_queue", { name, rank });
 }
 
-function cancelarBusqueda() {
-    location.reload();
-}
+function cancelarBusqueda() { location.reload(); }
 
 socket.on("match_found", (data) => {
-    console.log("¡Rival encontrado!", data);
+    currentRoom = data.room;
+    document.getElementById("opp-name-label").innerText = data.opponent.toUpperCase();
     document.getElementById("matchmaking").classList.add("hidden");
     document.getElementById("game").classList.remove("hidden");
-    document.getElementById("duelo-header").innerText = `VS ${data.opponent} (${data.opp_rank})`;
-    
-    // Iniciar el juego
-    startGame(data.room);
+    startGame();
 });
 
+// ESCUCHAR ACTUALIZACIÓN DEL RIVAL
+socket.on("update_opponent_score", (data) => {
+    oppScore = data.score;
+    document.getElementById("opp-duel-score").innerText = oppScore;
+});
+
+function startGame(){
+    score=0; oppScore=0; streak=0; questionCount=0;
+    document.getElementById("my-duel-score").innerText="0";
+    document.getElementById("opp-duel-score").innerText="0";
+    gameData = { labels: [], times: [], accuracy: {} };
+    fetchNewQuestion();
+}
+
+// --- LÓGICA DE JUEGO ---
 function unlockAudio() {
     const audios = ["snd-ok", "snd-bad", "snd-time", "snd-tick"];
     audios.forEach(id => {
         const a = document.getElementById(id);
         a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(()=>{});
     });
-}
-
-function startGame(roomId){
-    chosenDifficulty = document.getElementById("difficultySelect").value;
-    score=0; streak=0; questionCount=0;
-    gameData = { labels: [], times: [], accuracy: {} };
-    document.getElementById("score-value").innerText=0;
-    document.getElementById("player-label").innerText= document.getElementById("playerName").value||"Jugador Estrella";
-    fetchNewQuestion();
-}
-
-function restart(){
-    document.getElementById("end").classList.add("hidden");
-    document.getElementById("menu").classList.remove("hidden");
 }
 
 function deepClean(t){return t?.toString().trim().replace(/^['"]|['"]$/g,'')||""}
@@ -370,7 +378,7 @@ function parseOptions(o){
 async function fetchNewQuestion() {
     if(questionCount>=MAX_QUESTIONS) return endGame();
     questionCount++;
-    document.getElementById("counter").innerText=`Pregunta ${questionCount} de ${MAX_QUESTIONS}`;
+    document.getElementById("counter-val").innerText = questionCount;
 
     clearInterval(timer);
     document.getElementById("snd-tick").pause();
@@ -384,6 +392,7 @@ async function fetchNewQuestion() {
     bar.style.width = "100%";
 
     try {
+        chosenDifficulty = document.getElementById("difficultySelect").value;
         let url = `${API_BASE}/pregunta-random?t=${Date.now()}`;
         if(chosenDifficulty !== "Random") url += `&difficulty=${chosenDifficulty}`;
 
@@ -431,7 +440,6 @@ function startTimer(){
             clearInterval(timer);
             document.getElementById("snd-tick").pause();
             streak=0;
-            gameData.times.push(TIME_LIMIT);
             document.getElementById("time-result").innerText="⏰ ¡TIEMPO!";
             document.getElementById("snd-time").play().catch(()=>{});
             setTimeout(fetchNewQuestion,1500);
@@ -444,23 +452,28 @@ function check(sel,correct){
     document.getElementById("snd-tick").pause();
     const cleanCorrect=deepClean(correct);
     const timeSpent=(Date.now()-startTime)/1000;
-    gameData.times.push(timeSpent.toFixed(2));
 
-    let pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
+    let pts=0;
     const msg=document.getElementById("time-result");
     const card=document.getElementById("game");
 
     if(sel.trim()===cleanCorrect){
+        pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
         streak++;
         gameData.accuracy[gameData.currentCat].correct++;
-        confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
+        confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
 
         if(streak%3===0) pts+=10; 
         score+=pts;
-        document.getElementById("score-value").innerText=score;
+        document.getElementById("my-duel-score").innerText=score;
         document.getElementById("snd-ok").play().catch(()=>{});
         msg.innerText=`✅ Correcto +${pts} pts`;
         card.classList.add("flash-success");
+
+        // SINCRONIZAR PUNTAJE CON EL RIVAL
+        if(currentRoom) {
+            socket.emit("score_update", { room: currentRoom, score: score });
+        }
     } else {
         streak=0;
         document.getElementById("snd-bad").play().catch(()=>{});
@@ -478,30 +491,19 @@ function check(sel,correct){
 
 function endGame(){
     clearInterval(timer);
-    document.getElementById("snd-tick").pause();
     document.getElementById("game").classList.add("hidden");
     document.getElementById("end").classList.remove("hidden");
 
-    confetti({ particleCount: 150, spread: 180, origin: { y: 0.6 } });
-
-    const name=document.getElementById("player-label").innerText;
-    document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
-    document.getElementById("final-score").innerText=`Sumaste ${score} puntos`;
-
-    // GUARDAR RANKING ELO (Simulado por ahora)
-    let currentRank = parseInt(localStorage.getItem("qbit-rank") || 1000);
-    localStorage.setItem("qbit-rank", currentRank + Math.floor(score/10));
-
-    let ranking=JSON.parse(localStorage.getItem("qbit-ranking")||"[]");
-    ranking.push({name,score});
-    ranking.sort((a,b)=>b.score-a.score);
-    ranking=ranking.slice(0,5);
-    localStorage.setItem("qbit-ranking",JSON.stringify(ranking));
-
-    document.getElementById("ranking").innerHTML=
-    ranking.map((r,i)=>`${i+1}. ${r.name} — ${r.score} pts`).join("<br>");
+    const win = score > oppScore;
+    document.getElementById("win-loss-title").innerText = win ? "🏆 ¡HAS GANADO EL DUELO!" : "🥈 SEGUIMOS ADELANTE";
+    document.getElementById("final-duel-score").innerText = `Tú: ${score} - Rival: ${oppScore}`;
+    
+    // Ajuste de Rank
+    let rank = parseInt(localStorage.getItem("qbit-rank") || 1000);
+    localStorage.setItem("qbit-rank", win ? rank + 25 : rank - 15);
 
     renderCharts();
+    confetti({ particleCount: 150, spread: 180 });
 }
 
 function renderCharts() {
@@ -524,23 +526,6 @@ function renderCharts() {
         options: { 
             scales: { r: { beginAtZero: true, max: 100, grid: {color: '#3d4670'}, ticks: {display: false} } },
             plugins: { legend: { display: false } }
-        }
-    });
-
-    const ctxBar = document.getElementById('barChart').getContext('2d');
-    new Chart(ctxBar, {
-        type: 'bar',
-        data: {
-            labels: gameData.times.map((_, i) => `Q${i+1}`),
-            datasets: [{
-                label: 'Segundos',
-                data: gameData.times,
-                backgroundColor: '#ff4d6d'
-            }]
-        },
-        options: { 
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, grid: {color: '#3d4670'} } }
         }
     });
 }

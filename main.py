@@ -64,8 +64,6 @@ def init_db():
 init_db()
 
 # --- LÓGICA DE MATCHMAKING (SALAS) ---
-# Almacén temporal de jugadores buscando partida
-# Estructura: { sid: {"name": str, "rank": int} }
 waiting_pool = {}
 
 @sio.event
@@ -74,39 +72,25 @@ async def connect(sid, environ):
 
 @sio.event
 async def join_queue(sid, data):
-    """
-    Un jugador entra a la cola de espera.
-    data: {"name": "apodo", "rank": 1200}
-    """
     name = data.get("name", "Anónimo")
     rank = int(data.get("rank", 0))
-    
     waiting_pool[sid] = {"name": name, "rank": rank}
     print(f"⏳ {name} (Rank: {rank}) buscando oponente...")
-    
-    # Intentar emparejar inmediatamente
     await try_match(sid, rank)
 
 async def try_match(sid, rank):
-    # Buscamos oponente con diferencia de rank <= 300
     for opponent_sid, info in waiting_pool.items():
         if opponent_sid != sid:
             diff = abs(info['rank'] - rank)
             if diff <= 300:
-                # ¡PARTIDA ENCONTRADA!
                 room_id = f"room_{sid}_{opponent_sid}"
-                
-                # Unir a ambos a la sala de combate
                 await sio.enter_room(sid, room_id)
                 await sio.enter_room(opponent_sid, room_id)
-                
-                # Obtener info y quitarlos de la cola
                 p1 = waiting_pool.pop(sid)
                 p2 = waiting_pool.pop(opponent_sid)
                 
                 print(f"🎮 Duelo creado: {p1['name']} vs {p2['name']}")
                 
-                # Notificar a ambos jugadores
                 await sio.emit('match_found', {
                     'room': room_id,
                     'opponent': p2['name'],
@@ -120,13 +104,25 @@ async def try_match(sid, rank):
                 }, room=opponent_sid)
                 return
 
+# --- NUEVA LÓGICA: SINCRONIZACIÓN DE PUNTAJES EN VIVO ---
+@sio.event
+async def score_update(sid, data):
+    """
+    Recibe el puntaje del jugador y lo retransmite al oponente.
+    data: {"room": "room_id", "score": 150}
+    """
+    room = data.get("room")
+    score = data.get("score")
+    # Emitimos a todos en la sala EXCEPTO al que envió el mensaje (skip_sid)
+    await sio.emit('update_opponent_score', {'score': score}, room=room, skip_sid=sid)
+
 @sio.event
 async def disconnect(sid):
     if sid in waiting_pool:
         del waiting_pool[sid]
     print(f"🚫 Conexión cerrada: {sid}")
 
-# --- MODELOS DE DATOS Y RUTAS HTTP EXISTENTES ---
+# --- MODELOS DE DATOS Y RUTAS HTTP ---
 class Pregunta(BaseModel):
     question_text: str
     options: List[str]
