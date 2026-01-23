@@ -6,6 +6,7 @@
 <title>QBIT TRIVIA - Pro Edition</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
 <style>
 :root{
@@ -44,6 +45,18 @@ overflow-y: auto;
     animation: float 3s ease-in-out infinite;
     border: 0;
 }
+
+/* ANIMACIÓN DE RADAR PARA MATCHMAKING */
+.radar {
+    width: 150px; height: 150px; border: 2px solid var(--accent-green);
+    border-radius: 50%; margin: 20px auto; position: relative; overflow: hidden;
+}
+.radar::after {
+    content: ""; position: absolute; width: 100%; height: 100%;
+    top: 0; left: 0; background: conic-gradient(from 0deg, transparent, var(--accent-green));
+    animation: rotate 2s linear infinite; opacity: 0.3; transform-origin: center;
+}
+@keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .timer-container{
 width:100%;
@@ -181,7 +194,7 @@ font-size:1.1rem;
 background: #1e2640;
 color: white;
 text-align: center;
-appearance: none; /* Quitar estilo default en select */
+appearance: none; 
 }
 
 select { cursor: pointer; border: 1px solid #3d4670; }
@@ -226,10 +239,18 @@ canvas { max-width: 100%; }
         <option value="Hard">Dificultad: Difícil 🔥</option>
     </select>
 
-    <button class="start-btn" onclick="startGame()">¡A Jugar!</button>
+    <button class="start-btn" onclick="iniciarBusqueda()">Buscar Oponente</button>
+</div>
+
+<div class="container hidden" id="matchmaking">
+    <div class="radar"></div>
+    <h2 style="color:var(--accent-green)">Buscando Oponente...</h2>
+    <p id="match-status" style="color:var(--text-dim)">Analizando Ranking ELO</p>
+    <button class="start-btn" style="background:var(--text-red)" onclick="cancelarBusqueda()">Cancelar</button>
 </div>
 
 <div class="container hidden" id="game">
+    <h2 id="duelo-header" style="color:var(--accent-green); margin-bottom: 10px;">¡DUELO ENCONTRADO!</h2>
     <div id="meta-container">Cargando datos...</div> 
     <div id="question">Cargando desafío...</div>
     <div id="options-container"></div>
@@ -269,46 +290,61 @@ canvas { max-width: 100%; }
 <audio id="snd-tick" preload="auto" src="https://www.soundjay.com/clock/sounds/clock-ticking-2.mp3" loop></audio>
 
 <script>
+// CONFIGURACIÓN DE CONEXIÓN
+const API_BASE = "https://qbit-e6gb.onrender.com";
+const socket = io(API_BASE);
+
 let score=0,startTime,timer;
 let questionCount=0;
 let streak=0;
 let chosenDifficulty = "Random";
 const MAX_QUESTIONS=10;
 const TIME_LIMIT=15;
-const API_URL="https://qbit-e6gb.onrender.com/pregunta-random";
 
-let gameData = {
-    labels: [],
-    times: [],
-    accuracy: {}
-};
+let gameData = { labels: [], times: [], accuracy: {} };
+
+// LÓGICA DE TIEMPO REAL
+function iniciarBusqueda() {
+    const name = document.getElementById("playerName").value || "Jugador Estrella";
+    const rank = localStorage.getItem("qbit-rank") || 1000;
+    
+    unlockAudio();
+    
+    document.getElementById("menu").classList.add("hidden");
+    document.getElementById("matchmaking").classList.remove("hidden");
+    
+    // Entrar a la cola del servidor
+    socket.emit("join_queue", { name: name, rank: rank });
+}
+
+function cancelarBusqueda() {
+    location.reload();
+}
+
+socket.on("match_found", (data) => {
+    console.log("¡Rival encontrado!", data);
+    document.getElementById("matchmaking").classList.add("hidden");
+    document.getElementById("game").classList.remove("hidden");
+    document.getElementById("duelo-header").innerText = `VS ${data.opponent} (${data.opp_rank})`;
+    
+    // Iniciar el juego
+    startGame(data.room);
+});
 
 function unlockAudio() {
-    const audios = [
-        document.getElementById("snd-ok"),
-        document.getElementById("snd-bad"),
-        document.getElementById("snd-time"),
-        document.getElementById("snd-tick")
-    ];
-    audios.forEach(a => {
-        a.play().then(() => {
-            a.pause();
-            a.currentTime = 0;
-        }).catch(()=>{});
+    const audios = ["snd-ok", "snd-bad", "snd-time", "snd-tick"];
+    audios.forEach(id => {
+        const a = document.getElementById(id);
+        a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(()=>{});
     });
 }
 
-function startGame(){
-    unlockAudio();
+function startGame(roomId){
     chosenDifficulty = document.getElementById("difficultySelect").value;
     score=0; streak=0; questionCount=0;
     gameData = { labels: [], times: [], accuracy: {} };
     document.getElementById("score-value").innerText=0;
-    document.getElementById("menu").classList.add("hidden");
-    document.getElementById("end").classList.add("hidden");
-    document.getElementById("game").classList.remove("hidden");
-    document.getElementById("player-label").innerText=
-    document.getElementById("playerName").value||"Jugador Estrella";
+    document.getElementById("player-label").innerText= document.getElementById("playerName").value||"Jugador Estrella";
     fetchNewQuestion();
 }
 
@@ -323,7 +359,10 @@ function parseOptions(o){
     if(Array.isArray(o)&&o.length===1)return parseOptions(o[0]);
     if(Array.isArray(o))return o.map(deepClean);
     if(typeof o==="string"){
-        try{return JSON.parse(o.replace(/'/g,'"')).map(deepClean)}catch{return[]}
+        try{
+            let p = JSON.parse(o.replace(/'/g,'"'));
+            return Array.isArray(p) ? p.map(deepClean) : o.split("|").map(deepClean);
+        }catch{return o.split("|").map(deepClean)}
     }
     return[];
 }
@@ -345,30 +384,27 @@ async function fetchNewQuestion() {
     bar.style.width = "100%";
 
     try {
-        // PASAMOS LA DIFICULTAD COMO PARÁMETRO A LA API
-        let url = `${API_URL}?t=${Date.now()}`;
-        if(chosenDifficulty !== "Random") {
-            url += `&difficulty=${chosenDifficulty}`;
-        }
+        let url = `${API_BASE}/pregunta-random?t=${Date.now()}`;
+        if(chosenDifficulty !== "Random") url += `&difficulty=${chosenDifficulty}`;
 
         const r=await fetch(url);
         const d=await r.json();
 
-        const categoria = deepClean(d.category || d.categoria);
-        const dificultad = deepClean(d.difficulty || d.dificultad);
+        const categoria = deepClean(d.categoria);
+        const dificultad = deepClean(d.dificultad);
         
-        document.getElementById("question").innerText=deepClean(d.question_text || d.pregunta);
+        document.getElementById("question").innerText=deepClean(d.pregunta);
         document.getElementById("meta-container").innerText = `${categoria} • ${dificultad}`;
 
         if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
         gameData.accuracy[categoria].total++;
         gameData.currentCat = categoria;
 
-        parseOptions(d.options || d.opciones).forEach(o=>{
+        parseOptions(d.opciones).forEach(o=>{
             const b=document.createElement("button");
             b.className="option-btn";
             b.innerText=o;
-            b.onclick=()=>check(o, d.correct_answer || d.correcta);
+            b.onclick=()=>check(o, d.correcta);
             opt.appendChild(b);
         });
 
@@ -451,6 +487,10 @@ function endGame(){
     const name=document.getElementById("player-label").innerText;
     document.getElementById("final-player").innerText=`¡Buen juego, ${name}!`;
     document.getElementById("final-score").innerText=`Sumaste ${score} puntos`;
+
+    // GUARDAR RANKING ELO (Simulado por ahora)
+    let currentRank = parseInt(localStorage.getItem("qbit-rank") || 1000);
+    localStorage.setItem("qbit-rank", currentRank + Math.floor(score/10));
 
     let ranking=JSON.parse(localStorage.getItem("qbit-ranking")||"[]");
     ranking.push({name,score});
