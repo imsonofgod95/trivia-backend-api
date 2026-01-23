@@ -46,7 +46,6 @@ overflow-y: auto;
     border: 0;
 }
 
-/* ANIMACIÓN DE RADAR PARA MATCHMAKING */
 .radar {
     width: 150px; height: 150px; border: 2px solid var(--accent-green);
     border-radius: 50%; margin: 20px auto; position: relative; overflow: hidden;
@@ -102,7 +101,6 @@ transition: 0.3s;
 
 .hidden{display:none}
 
-/* MARCADOR DE DUELO EN VIVO */
 .duel-status {
     display: flex;
     justify-content: space-around;
@@ -275,8 +273,8 @@ canvas { max-width: 100%; }
         </div>
     </div>
 
-    <div id="meta-container">Cargando datos...</div> 
-    <div id="question">Cargando desafío...</div>
+    <div id="meta-container">Cargando desafío...</div> 
+    <div id="question">Preparando duelo...</div>
     <div id="options-container"></div>
 
     <div class="score-bar">
@@ -288,11 +286,10 @@ canvas { max-width: 100%; }
 
 <div class="container hidden" id="end">
 <h1 id="win-loss-title">🏁 ¡Partida Terminada!</h1>
-<p id="final-player"></p>
 <p id="final-duel-score" style="font-size: 1.5rem; color: var(--accent-green)"></p>
 
 <div class="chart-box">
-    <p style="font-size: 0.8rem; color: var(--text-dim)">TU RENDIMIENTO</p>
+    <p style="font-size: 0.8rem; color: var(--text-dim)">RENDIMIENTO DEL DUELO</p>
     <canvas id="radarChart"></canvas>
 </div>
 
@@ -312,50 +309,166 @@ const socket = io(API_BASE);
 let score=0, oppScore=0, startTime, timer, currentRoom = null;
 let questionCount=0;
 let streak=0;
-let chosenDifficulty = "Random";
 const MAX_QUESTIONS=10;
 const TIME_LIMIT=15;
 
 let gameData = { labels: [], times: [], accuracy: {} };
 
-// --- LÓGICA MULTIJUGADOR ---
+// --- LÓGICA MULTIJUGADOR (SOCKETS) ---
 function iniciarBusqueda() {
     const name = document.getElementById("playerName").value || "Jugador Estrella";
     const rank = localStorage.getItem("qbit-rank") || 1000;
+    const diff = document.getElementById("difficultySelect").value;
+    
     unlockAudio();
+    
     document.getElementById("menu").classList.add("hidden");
     document.getElementById("matchmaking").classList.remove("hidden");
-    socket.emit("join_queue", { name, rank });
+    
+    socket.emit("join_queue", { name: name, rank: rank, difficulty: diff });
 }
 
 function cancelarBusqueda() { location.reload(); }
 
+// Evento: El servidor encontró rival y envía la primera pregunta
 socket.on("match_found", (data) => {
     currentRoom = data.room;
+    questionCount = 0; 
+    score = 0; oppScore = 0;
+    
     document.getElementById("opp-name-label").innerText = data.opponent.toUpperCase();
     document.getElementById("matchmaking").classList.add("hidden");
     document.getElementById("game").classList.remove("hidden");
-    startGame();
+    
+    // Mostramos la primera pregunta que ya viene en el match
+    displayQuestion(data.first_question);
 });
 
-// ESCUCHAR ACTUALIZACIÓN DEL RIVAL
+// Evento: El servidor envía la siguiente pregunta solicitada
+socket.on("receive_question", (question) => {
+    displayQuestion(question);
+});
+
+// Evento: El oponente actualizó su puntaje
 socket.on("update_opponent_score", (data) => {
     oppScore = data.score;
     document.getElementById("opp-duel-score").innerText = oppScore;
 });
 
-function startGame(){
-    score=0; oppScore=0; streak=0; questionCount=0;
-    document.getElementById("my-duel-score").innerText="0";
-    document.getElementById("opp-duel-score").innerText="0";
-    gameData = { labels: [], times: [], accuracy: {} };
-    fetchNewQuestion();
+function displayQuestion(d) {
+    questionCount++;
+    document.getElementById("counter-val").innerText = questionCount;
+
+    clearInterval(timer);
+    document.getElementById("snd-tick").pause();
+    document.getElementById("timer-bar").classList.remove("timer-urgent");
+
+    const opt=document.getElementById("options-container");
+    const bar=document.getElementById("timer-bar");
+    const msg=document.getElementById("time-result");
+    opt.innerHTML = "";
+    msg.innerText = "¡Sé más rápido que tu rival!";
+    bar.style.width = "100%";
+
+    const categoria = deepClean(d.categoria);
+    const dificultad = deepClean(d.dificultad);
+    
+    document.getElementById("question").innerText=deepClean(d.pregunta);
+    document.getElementById("meta-container").innerText = `${categoria} • ${dificultad}`;
+
+    if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
+    gameData.accuracy[categoria].total++;
+    gameData.currentCat = categoria;
+
+    parseOptions(d.opciones).forEach(o=>{
+        const b=document.createElement("button");
+        b.className="option-btn";
+        b.innerText=o;
+        b.onclick=()=>check(o, d.correcta);
+        opt.appendChild(b);
+    });
+
+    startTime=Date.now();
+    startTimer();
 }
 
-// --- LÓGICA DE JUEGO ---
+function check(sel, correct){
+    clearInterval(timer);
+    document.getElementById("snd-tick").pause();
+    const cleanCorrect=deepClean(correct);
+    const timeSpent=(Date.now()-startTime)/1000;
+
+    let pts=0;
+    const card=document.getElementById("game");
+
+    if(sel.trim() === cleanCorrect){
+        pts=Math.max(2, Math.ceil((TIME_LIMIT-timeSpent)*2));
+        streak++;
+        gameData.accuracy[gameData.currentCat].correct++;
+        confetti({ particleCount: 30, spread: 50, origin: { y: 0.7 } });
+
+        if(streak%3===0) pts+=10; 
+        score+=pts;
+        document.getElementById("my-duel-score").innerText = score;
+        document.getElementById("snd-ok").play().catch(()=>{});
+        card.classList.add("flash-success");
+
+        // ENVIAMOS ACTUALIZACIÓN AL RIVAL
+        if(currentRoom) {
+            socket.emit("score_update", { room: currentRoom, score: score });
+        }
+    } else {
+        streak=0;
+        document.getElementById("snd-bad").play().catch(()=>{});
+        card.classList.add("flash-error");
+    }
+
+    document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+
+    setTimeout(()=>{
+        card.classList.remove("flash-success","flash-error");
+        
+        if(questionCount < MAX_QUESTIONS) {
+            // PEDIMOS LA SIGUIENTE AL SERVIDOR
+            socket.emit("next_question", { room: currentRoom, index: questionCount });
+        } else {
+            endGame();
+        }
+    }, 1500);
+}
+
+// --- LÓGICA DE CIERRE Y UTILIDADES ---
+function startTimer(){
+    const bar=document.getElementById("timer-bar");
+    timer=setInterval(()=>{
+        const t=(Date.now()-startTime)/1000;
+        const timeLeft = TIME_LIMIT - t;
+        bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
+        if(timeLeft <= 5 && timeLeft > 0) document.getElementById("snd-tick").play().catch(()=>{});
+        if(t>=TIME_LIMIT){
+            clearInterval(timer);
+            check("", "---ERROR---");
+        }
+    }, 50);
+}
+
+function endGame(){
+    document.getElementById("game").classList.add("hidden");
+    document.getElementById("end").classList.remove("hidden");
+
+    const win = score > oppScore;
+    document.getElementById("win-loss-title").innerText = win ? "🏆 ¡VICTORIA MAGISTRAL!" : "🥈 SIGUE PRACTICANDO";
+    document.getElementById("final-duel-score").innerText = `Tú: ${score} - Rival: ${oppScore}`;
+    
+    let rank = parseInt(localStorage.getItem("qbit-rank") || 1000);
+    localStorage.setItem("qbit-rank", win ? rank + 25 : rank - 15);
+
+    renderCharts();
+    confetti({ particleCount: 150, spread: 180 });
+}
+
 function unlockAudio() {
-    const audios = ["snd-ok", "snd-bad", "snd-time", "snd-tick"];
-    audios.forEach(id => {
+    ["snd-ok", "snd-bad", "snd-time", "snd-tick"].forEach(id => {
         const a = document.getElementById(id);
         a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(()=>{});
     });
@@ -373,137 +486,6 @@ function parseOptions(o){
         }catch{return o.split("|").map(deepClean)}
     }
     return[];
-}
-
-async function fetchNewQuestion() {
-    if(questionCount>=MAX_QUESTIONS) return endGame();
-    questionCount++;
-    document.getElementById("counter-val").innerText = questionCount;
-
-    clearInterval(timer);
-    document.getElementById("snd-tick").pause();
-    document.getElementById("timer-bar").classList.remove("timer-urgent");
-
-    const opt=document.getElementById("options-container");
-    const bar=document.getElementById("timer-bar");
-    const msg=document.getElementById("time-result");
-    opt.innerHTML = "";
-    msg.innerText = "¡Concéntrate!";
-    bar.style.width = "100%";
-
-    try {
-        chosenDifficulty = document.getElementById("difficultySelect").value;
-        let url = `${API_BASE}/pregunta-random?t=${Date.now()}`;
-        if(chosenDifficulty !== "Random") url += `&difficulty=${chosenDifficulty}`;
-
-        const r=await fetch(url);
-        const d=await r.json();
-
-        const categoria = deepClean(d.categoria);
-        const dificultad = deepClean(d.dificultad);
-        
-        document.getElementById("question").innerText=deepClean(d.pregunta);
-        document.getElementById("meta-container").innerText = `${categoria} • ${dificultad}`;
-
-        if(!gameData.accuracy[categoria]) gameData.accuracy[categoria] = {correct: 0, total: 0};
-        gameData.accuracy[categoria].total++;
-        gameData.currentCat = categoria;
-
-        parseOptions(d.opciones).forEach(o=>{
-            const b=document.createElement("button");
-            b.className="option-btn";
-            b.innerText=o;
-            b.onclick=()=>check(o, d.correcta);
-            opt.appendChild(b);
-        });
-
-        startTime=Date.now();
-        startTimer();
-    } catch (e) {
-        document.getElementById("question").innerText="¡Error de conexión!";
-    }
-}
-
-function startTimer(){
-    const bar=document.getElementById("timer-bar");
-    timer=setInterval(()=>{
-        const t=(Date.now()-startTime)/1000;
-        const timeLeft = TIME_LIMIT - t;
-        bar.style.width=Math.max(0,(timeLeft/TIME_LIMIT)*100)+"%";
-
-        if(timeLeft <= 5 && timeLeft > 0) {
-            bar.classList.add("timer-urgent");
-            document.getElementById("snd-tick").play().catch(()=>{});
-        }
-
-        if(t>=TIME_LIMIT){
-            clearInterval(timer);
-            document.getElementById("snd-tick").pause();
-            streak=0;
-            document.getElementById("time-result").innerText="⏰ ¡TIEMPO!";
-            document.getElementById("snd-time").play().catch(()=>{});
-            setTimeout(fetchNewQuestion,1500);
-        }
-    },50);
-}
-
-function check(sel,correct){
-    clearInterval(timer);
-    document.getElementById("snd-tick").pause();
-    const cleanCorrect=deepClean(correct);
-    const timeSpent=(Date.now()-startTime)/1000;
-
-    let pts=0;
-    const msg=document.getElementById("time-result");
-    const card=document.getElementById("game");
-
-    if(sel.trim()===cleanCorrect){
-        pts=Math.max(2,Math.ceil((TIME_LIMIT-timeSpent)*2));
-        streak++;
-        gameData.accuracy[gameData.currentCat].correct++;
-        confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
-
-        if(streak%3===0) pts+=10; 
-        score+=pts;
-        document.getElementById("my-duel-score").innerText=score;
-        document.getElementById("snd-ok").play().catch(()=>{});
-        msg.innerText=`✅ Correcto +${pts} pts`;
-        card.classList.add("flash-success");
-
-        // SINCRONIZAR PUNTAJE CON EL RIVAL
-        if(currentRoom) {
-            socket.emit("score_update", { room: currentRoom, score: score });
-        }
-    } else {
-        streak=0;
-        document.getElementById("snd-bad").play().catch(()=>{});
-        msg.innerText=`❌ Era: ${cleanCorrect}`;
-        card.classList.add("flash-error");
-    }
-
-    document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
-
-    setTimeout(()=>{
-        card.classList.remove("flash-success","flash-error");
-        fetchNewQuestion();
-    },2000);
-}
-
-function endGame(){
-    clearInterval(timer);
-    document.getElementById("game").classList.add("hidden");
-    document.getElementById("end").classList.remove("hidden");
-
-    const win = score > oppScore;
-    document.getElementById("win-loss-title").innerText = win ? "🏆 ¡HAS GANADO EL DUELO!" : "🥈 SEGUIMOS ADELANTE";
-    document.getElementById("final-duel-score").innerText = `Tú: ${score} - Rival: ${oppScore}`;
-    
-    // Ajuste de Rank
-    let rank = parseInt(localStorage.getItem("qbit-rank") || 1000);
-    localStorage.setItem("qbit-rank", win ? rank + 25 : rank - 15);
-
-    renderCharts();
-    confetti({ particleCount: 150, spread: 180 });
 }
 
 function renderCharts() {
