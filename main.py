@@ -8,6 +8,7 @@ import pandas as pd
 import os
 import io
 import socketio
+import asyncio # Necesario para los contadores de las salas
 
 # --- CONFIGURACIÓN DE SOCKET.IO ---
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins="*")
@@ -62,85 +63,101 @@ def init_db():
 
 init_db()
 
-# --- LÓGICA DE DUELO SINCRONIZADO ---
-waiting_pool = {}
-active_rooms = {} # Almacena las preguntas de cada partida activa
+# --- LÓGICA DE SALAS MASIVAS Y DUELOS ---
+waiting_pool = {} # Para 1vs1
+active_rooms = {} # Almacena datos de todas las partidas (1vs1 y Masivas)
+massive_lobbies = {} # Gestiona los grupos de 10, 25, 50
 
 def get_synced_questions(difficulty):
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Filtramos por dificultad si no es Random
     if difficulty and difficulty.lower() != "random":
         cursor.execute("SELECT * FROM preguntas WHERE dificultad = ? COLLATE NOCASE ORDER BY RANDOM() LIMIT 10", (difficulty,))
     else:
         cursor.execute("SELECT * FROM preguntas ORDER BY RANDOM() LIMIT 10")
-    
     rows = cursor.fetchall()
     conn.close()
-    
-    return [{
-        "pregunta": r["pregunta"],
-        "opciones": r["opciones"],
-        "correcta": r["correcta"],
-        "categoria": r["categoria"],
-        "dificultad": r["dificultad"]
-    } for r in rows]
+    return [{"pregunta": r["pregunta"], "opciones": r["opciones"], "correcta": r["correcta"], "categoria": r["categoria"], "dificultad": r["dificultad"]} for r in rows]
 
 @sio.event
 async def connect(sid, environ):
     print(f"🔌 Jugador conectado: {sid}")
 
+# --- EVENTO PARA SALAS MASIVAS ---
+@sio.event
+async def join_massive_lobby(sid, data):
+    name = data.get("name", "Anónimo")
+    size = data.get("size", "10") # "10", "25" o "50"
+    room_id = f"massive_{size}_lobby"
+    
+    await sio.enter_room(sid, room_id)
+    
+    if room_id not in massive_lobbies:
+        massive_lobbies[room_id] = {"players": {}, "started": False, "countdown": 30}
+        # Iniciar tarea de cuenta regresiva en segundo plano
+        asyncio.create_task(massive_room_countdown(room_id))
+    
+    massive_lobbies[room_id]["players"][sid] = {"name": name, "score": 0}
+    
+    print(f"🏢 {name} entró a sala masiva de {size}")
+    
+    # Notificar a la sala el conteo actual
+    await sio.emit('lobby_update', {
+        "count": len(massive_lobbies[room_id]["players"]),
+        "size": size,
+        "seconds": massive_lobbies[room_id]["countdown"]
+    }, room=room_id)
+
+async def massive_room_countdown(room_id):
+    while massive_lobbies[room_id]["countdown"] > 0:
+        await asyncio.sleep(1)
+        massive_lobbies[room_id]["countdown"] -= 1
+        await sio.emit('lobby_timer', {"seconds": massive_lobbies[room_id]["countdown"]}, room=room_id)
+    
+    # EMPEZAR PARTIDA MASIVA
+    if room_id in massive_lobbies:
+        questions = get_synced_questions("Random")
+        active_rooms[room_id] = {"questions": questions, "players": massive_lobbies[room_id]["players"]}
+        
+        print(f"🚀 Partida MASIVA {room_id} iniciando con {len(active_rooms[room_id]['players'])} jugadores")
+        
+        await sio.emit('start_massive_game', {
+            "room": room_id,
+            "first_question": questions[0]
+        }, room=room_id)
+        
+        # Limpiar lobby para el siguiente grupo
+        del massive_lobbies[room_id]
+
+# --- LÓGICA 1VS1 (MANTENIDA) ---
 @sio.event
 async def join_queue(sid, data):
     name = data.get("name", "Anónimo")
     rank = int(data.get("rank", 1000))
     diff = data.get("difficulty", "Random")
-    
     waiting_pool[sid] = {"name": name, "rank": rank, "difficulty": diff}
-    print(f"⏳ {name} buscando oponente en {diff}...")
     await try_match(sid, rank)
 
 async def try_match(sid, rank):
     player = waiting_pool.get(sid)
     if not player: return
-
     for opponent_sid, info in waiting_pool.items():
         if opponent_sid != sid:
-            if abs(info['rank'] - rank) <= 500: # Rango de emparejamiento
+            if abs(info['rank'] - rank) <= 500:
                 room_id = f"room_{sid}_{opponent_sid}"
-                
-                # Generar paquete de 10 preguntas idénticas
                 questions = get_synced_questions(player["difficulty"])
                 active_rooms[room_id] = {"questions": questions}
-
                 await sio.enter_room(sid, room_id)
                 await sio.enter_room(opponent_sid, room_id)
-                
-                p1 = waiting_pool.pop(sid)
-                p2 = waiting_pool.pop(opponent_sid)
-                
-                print(f"🎮 Duelo sincronizado: {p1['name']} vs {p2['name']}")
-                
-                # Enviamos la señal de inicio con la PRIMERA PREGUNTA incluida
-                match_data = {
-                    'room': room_id,
-                    'opponent': p2['name'],
-                    'opp_rank': p2['rank'],
-                    'first_question': questions[0]
-                }
-                await sio.emit('match_found', match_data, room=sid)
-                
-                match_data['opponent'] = p1['name']
-                match_data['opp_rank'] = p1['rank']
-                await sio.emit('match_found', match_data, room=opponent_sid)
+                p1, p2 = waiting_pool.pop(sid), waiting_pool.pop(opponent_sid)
+                await sio.emit('match_found', {'room': room_id, 'opponent': p2['name'], 'opp_rank': p2['rank'], 'first_question': questions[0]}, room=sid)
+                await sio.emit('match_found', {'room': room_id, 'opponent': p1['name'], 'opp_rank': p1['rank'], 'first_question': questions[0]}, room=opponent_sid)
                 return
 
 @sio.event
 async def next_question(sid, data):
-    """ El cliente solicita la siguiente pregunta del paquete """
     room_id = data.get("room")
-    index = data.get("index") # Índice de la pregunta solicitada
-    
+    index = data.get("index")
     if room_id in active_rooms and index < 10:
         question = active_rooms[room_id]["questions"][index]
         await sio.emit('receive_question', question, room=sid)
@@ -149,15 +166,26 @@ async def next_question(sid, data):
 async def score_update(sid, data):
     room = data.get("room")
     score = data.get("score")
-    await sio.emit('update_opponent_score', {'score': score}, room=room, skip_sid=sid)
+    # Para salas masivas, enviamos el leaderboard a todos
+    if room.startswith("massive"):
+        active_rooms[room]["players"][sid]["score"] = score
+        # Crear ranking ordenado
+        leaderboard = sorted(active_rooms[room]["players"].values(), key=lambda x: x["score"], reverse=True)
+        await sio.emit('leaderboard_update', leaderboard, room=room)
+    else:
+        # Para 1vs1 normal
+        await sio.emit('update_opponent_score', {'score': score}, room=room, skip_sid=sid)
 
 @sio.event
 async def disconnect(sid):
-    if sid in waiting_pool:
-        del waiting_pool[sid]
+    if sid in waiting_pool: del waiting_pool[sid]
+    # Limpiar de lobbies masivos si se desconecta antes de empezar
+    for lobby in massive_lobbies.values():
+        if sid in lobby["players"]:
+            del lobby["players"][sid]
     print(f"🚫 Conexión cerrada: {sid}")
 
-# --- MODELOS Y RUTAS ADMINISTRATIVAS ---
+# --- MODELOS Y RUTAS ADMINISTRATIVAS (MANTENIDAS) ---
 class Pregunta(BaseModel):
     question_text: str
     options: List[str]
