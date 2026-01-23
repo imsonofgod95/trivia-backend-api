@@ -76,7 +76,6 @@ position: relative; margin: 20px 0; transition: 0.3s;
 
 .hidden{display:none}
 
-/* NUEVO: LEADERBOARD LATERAL PARA MODO MASIVO */
 #leaderboard-box {
     position: absolute; left: -220px; top: 0; width: 200px;
     background: var(--card-bg); padding: 15px; border-radius: 20px;
@@ -114,6 +113,13 @@ border-radius:15px; font-weight:bold; cursor:pointer; margin-top:10px;
     display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 20px;
 }
 .btn-massive { background: #4a5568; font-size: 0.8rem; padding: 12px; }
+
+.time-msg { font-size:.8rem; color:var(--text-dim); margin-top:10px; min-height:1.8rem; }
+.flash-success{box-shadow:0 0 40px var(--accent-green) !important;}
+.flash-error{ animation: shake 0.4s !important; box-shadow:0 0 40px var(--text-red) !important; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-12px); } 50% { transform: translateX(12px); } 75% { transform: translateX(-12px); } }
+
+.score-bar { margin-top:20px; padding-top:15px; border-top:2px solid #3d4670; display:flex; justify-content:space-between; color:var(--accent-green); font-weight:bold; }
 </style>
 </head>
 
@@ -123,6 +129,8 @@ border-radius:15px; font-weight:bold; cursor:pointer; margin-top:10px;
 
 <div class="container" id="menu">
     <img src="logo.png" onerror="this.src='https://i.ibb.co/LdpXW4P/logo-qbit.png'" class="logo-app">
+    <p style="color:var(--accent-green); font-size: 1.1rem; margin-top: -10px; text-shadow: 0 0 10px var(--accent-green);">"DOMINA EL CÓDIGO, CONQUISTA EL CONOCIMIENTO"</p>
+    
     <input id="playerName" placeholder="Tu Apodo">
     
     <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -179,6 +187,8 @@ border-radius:15px; font-weight:bold; cursor:pointer; margin-top:10px;
 </div>
 
 <audio id="snd-tick" preload="auto" src="https://www.soundjay.com/clock/sounds/clock-ticking-2.mp3" loop></audio>
+<audio id="snd-ok" preload="auto" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
+<audio id="snd-bad" preload="auto" src="https://www.soundjay.com/buttons/sounds/button-10.mp3"></audio>
 
 <script>
 const API_BASE = "https://qbit-e6gb.onrender.com";
@@ -190,7 +200,7 @@ let qbits = parseInt(localStorage.getItem("qbit-balance") || "0");
 
 document.getElementById("reward-info").innerText = `💰 Mis Qbits: ${qbits}`;
 
-// --- LÓGICA DE MODOS ---
+// --- MODOS DE JUEGO ---
 
 function unirseAMasiva(size) {
     isMassive = true; soloMode = false;
@@ -204,13 +214,10 @@ function unirseAMasiva(size) {
 function iniciarBusqueda() {
     isMassive = false; soloMode = false;
     const name = document.getElementById("playerName").value || "Jugador";
-    const rank = localStorage.getItem("qbit-rank") || 1000;
-    socket.emit("join_queue", { name, rank, difficulty: "Random" });
+    socket.emit("join_queue", { name, rank: 1000, difficulty: "Random" });
     document.getElementById("menu").classList.add("hidden");
     document.getElementById("lobby").classList.remove("hidden");
     document.getElementById("lobby-title").innerText = "Buscando Rival...";
-    document.getElementById("lobby-timer-display").innerText = "∞";
-    document.getElementById("lobby-count").innerText = "Matchmaking...";
 }
 
 function iniciarModoSolitario() {
@@ -259,7 +266,6 @@ socket.on("leaderboard_update", (data) => {
 });
 
 socket.on("receive_question", (question) => displayQuestion(question));
-
 socket.on("update_opponent_score", (data) => {
     oppScore = data.score;
     document.getElementById("opp-duel-score").innerText = oppScore;
@@ -276,13 +282,9 @@ function startGame(firstQ = null) {
 // --- LÓGICA DE TRIVIA ---
 
 async function fetchSoloQuestion() {
-    try {
-        const r = await fetch(`${API_BASE}/pregunta-random`);
-        const d = await r.json();
-        displayQuestion(d);
-    } catch (e) {
-        document.getElementById("question").innerText = "Error de conexión";
-    }
+    const r = await fetch(`${API_BASE}/pregunta-random`);
+    const d = await r.json();
+    displayQuestion(d);
 }
 
 function displayQuestion(d) {
@@ -309,6 +311,7 @@ function check(sel, correct) {
     clearInterval(timer);
     const cleanCorrect = correct.trim();
     const timeSpent = (Date.now() - startTime) / 1000;
+    const card = document.getElementById("game");
 
     if (sel.trim() === cleanCorrect) {
         let pts = Math.max(2, Math.ceil((15 - timeSpent) * 2));
@@ -316,15 +319,19 @@ function check(sel, correct) {
         if (streak % 3 === 0) pts += 10;
         score += pts;
         document.getElementById("my-duel-score").innerText = score;
-        
-        // Sincronizar puntos (ya sea masivo o 1vs1)
         if (currentRoom) socket.emit("score_update", { room: currentRoom, score: score });
-        
         confetti({ particleCount: 30 });
-    } else { streak = 0; }
+        document.getElementById("snd-ok").play().catch(()=>{});
+        card.classList.add("flash-success");
+    } else { 
+        streak = 0; 
+        document.getElementById("snd-bad").play().catch(()=>{});
+        card.classList.add("flash-error");
+    }
 
     document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
     setTimeout(() => {
+        card.classList.remove("flash-success","flash-error");
         if (questionCount < 10) {
             if (soloMode) fetchSoloQuestion();
             else socket.emit("next_question", { room: currentRoom, index: questionCount });
@@ -344,12 +351,10 @@ function endGame() {
     document.getElementById("game").classList.add("hidden");
     document.getElementById("end").classList.remove("hidden");
     document.getElementById("final-duel-score").innerText = `Puntaje Final: ${score}`;
-    
     let reward = Math.floor(score / 10);
     qbits += reward;
     localStorage.setItem("qbit-balance", qbits);
     document.getElementById("reward-msg").innerText = `+${reward} Qbits ganados 🪙`;
-    
     renderCharts();
 }
 
@@ -365,7 +370,6 @@ function renderCharts() {
         data: {
             labels: ['Agilidad', 'Racha', 'Aciertos'],
             datasets: [{ 
-                label: 'Stats',
                 data: [score, streak*10, score/2], 
                 borderColor: '#00e676',
                 backgroundColor: 'rgba(0, 230, 118, 0.2)'
